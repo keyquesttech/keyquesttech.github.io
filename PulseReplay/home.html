@@ -14,6 +14,12 @@
             height: 100vh;
             margin: 0;
             flex-direction: column;
+            gap: 20px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
         }
 
         .audio-container {
@@ -23,31 +29,231 @@
             gap: 10px;
         }
 
-        audio::-webkit-media-controls-time-remaining,
-        audio::-webkit-media-controls-current-time {
-            display: none;
+        pre {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            width: 400px;
+            height: 120px;
+            /* Adjusted height to match the height of the audio players */
+            overflow-y: scroll;
         }
 
-        audio::-webkit-media-controls-panel {
-            min-height: 50px;
+        code {
+            display: block;
         }
     </style>
 </head>
 
 <body>
-    <div class="audio-container">
-        <!-- Generate 4 audio players -->
-        <script>
-            for (let i = 1; i <= 4; i++) {
-                document.write(`
-                    <audio controls controlsList="nodownload nofullscreen noremoteplayback">
-                        <source src="Audio_raw/${i}.mp3" type="audio/mp3">
-                        Your browser does not support the audio tag.
-                    </audio>
-                `);
-            }
-        </script>
+    <div class="container">
+        <div class="audio-container">
+            <!-- Generate 4 audio players -->
+            <script>
+                for (let i = 1; i <= 4; i++) {
+                    document.write(`
+                        <audio controls controlsList="nodownload nofullscreen noremoteplayback">
+                            <source src="Audio_raw/${i}.mp3" type="audio/mp3">
+                            Your browser does not support the audio tag.
+                        </audio>
+                    `);
+                }
+            </script>
+        </div>
+
+        <div>
+            <!-- Code block to display CSV content -->
+            <pre><code id="csv-content"></code></pre>
+        </div>
     </div>
+
+    <script>
+        // Directly insert the CSV content into the code block
+        const csvData = `Sample data recorded for "1.mp3":
+        
+Timestamp,Sample Value
+s1, 318
+s1, 322
+s1, 324
+s1, 330
+s1, 330
+s1, 341
+s1, 348
+s1, 334
+s1, 333
+s1, 351
+s1, 361
+s1, 259
+s1, 368
+s1, 380
+s1, 393
+s1, 405
+s1, 433
+s1, 467
+s1, 475
+s1, 433
+s1, 363
+s1, 322
+s1, 325
+s1, 326
+s1, 324
+s1, 321
+s1, 320
+s1, 318
+s1, 317
+s1, 319
+s1, 325
+s1, 330
+s1, 327
+s1, 344
+s1, 334
+s1, 327
+s1, 337
+s2, 408
+s2, 257
+s2, 353
+s2, 373
+s2, 386
+s2, 395
+s2, 414
+s2, 448
+s2, 478
+s2, 457
+s2, 403
+s2, 338
+s2, 321
+s2, 324
+s2, 324
+s2, 318
+s2, 317
+s2, 314
+s2, 317
+s2, 322
+s2, 326
+s2, 342
+s2, 340
+s2, 326
+s2, 337
+s2, 385
+s2, 221
+s2, 372
+s2, 385
+s2, 395
+s2, 423
+s2, 462
+s2, 477
+s2, 432
+s2, 351
+s3, 323
+s3, 330
+s3, 327
+s3, 322
+s3, 318
+s3, 319
+s3, 322
+s3, 325
+s3, 341
+s3, 335
+s3, 328
+s3, 344
+s3, 324
+s3, 270
+s3, 370
+s3, 386
+s3, 398
+s3, 424
+s3, 468
+s3, 464
+s3, 410
+s3, 338
+s3, 323
+s3, 329
+s3, 331
+s3, 325
+s3, 320
+s3, 325
+s3, 327
+s3, 335
+s3, 330
+s3, 331
+s3, 378
+s4, 315
+s4, 349
+s4, 366
+s4, 377
+s4, 393
+s4, 424
+s4, 457
+s4, 418
+s4, 346
+s4, 318
+s4, 324
+s4, 337
+s4, 324
+s4, 310
+s4, 315
+s4, 328
+s4, 334
+s4, 328
+s4, 328
+s4, 335
+s4, 354
+s4, 237
+s4, 359
+s4, 364
+s4, 371
+s4, 387
+s4, 412
+s4, 436
+s4, 432
+s4, 403
+s4, 347
+s4, 313
+s4, 330
+s4, 327
+s4, 336
+s4, 325
+s5, 329
+s5, 330
+s5, 341
+s5, 335
+s5, 332
+s5, 340
+s5, 375
+s5, 339
+s5, 334
+s5, 358
+s5, 368
+s5, 377
+s5, 395
+s5, 412
+s5, 434
+s5, 419
+s5, 373
+s5, 336
+s5, 323
+s5, 335
+s5, 334
+s5, 336
+s5, 336
+s5, 332
+s5, 335
+s5, 341
+s5, 338
+s5, 322
+s5, 334
+s5, 365
+s5, 331
+s5, 283
+s5, 355
+s5, 362
+s5, 366
+s5, 381
+s5, 399`;
+
+        document.getElementById('csv-content').innerText = csvData;
+    </script>
 </body>
 
 </html>
