@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Players</title>
+    <style>
+        body {
+            background-color: #eeeeee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        .audio-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        audio::-webkit-media-controls-time-remaining,
+        audio::-webkit-media-controls-current-time {
+            display: none;
+        }
+
+        audio::-webkit-media-controls-panel {
+            min-height: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="audio-container">
+        <!-- Generate 4 audio players -->
+        <script>
+            for (let i = 1; i <= 4; i++) {
+                document.write(`
+                    <audio controls controlsList="nodownload nofullscreen noremoteplayback">
+                        <source src="Audio_raw/${i}.mp3" type="audio/mp3">
+                        Your browser does not support the audio tag.
+                    </audio>
+                `);
+            }
+        </script>
+    </div>
+</body>
+
+</html>
