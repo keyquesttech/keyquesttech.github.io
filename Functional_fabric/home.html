@@ -29,13 +29,22 @@
 
         .video-wrapper {
             display: flex;
+            flex-direction: column;
             align-items: center;
             gap: 10px;
+            position: relative; /* Make the wrapper position relative for absolute positioning of titles */
+        }
+
+        .video-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 50px; /* Add a margin from the bottom of the title to the top of the video players */
         }
 
         video {
-            width: 478px;
-            height: calc(100vh - 20px);
+            width: 300px;
+            height: calc(50vh - 20px);
             object-fit: contain;
             margin: 10px 0;
         }
@@ -45,6 +54,16 @@
             font-weight: bold;
             white-space: nowrap;
             font-family: 'Quicksand', sans-serif;
+            position: absolute;
+            top: 0; /* Align the title to the top */
+        }
+
+        .vent-title {
+            left: +230px; /* Adjust position to the left with a margin */
+        }
+
+        .reinforcement-title {
+            right: +240px; /* Adjust position to the right with a margin */
         }
     </style>
 </head>
@@ -52,18 +71,30 @@
 <body>
     <div class="video-container">
         <div class="video-wrapper">
-            <div class="title">Vent embroidery</div>
-            <video controls>
-                <source src="Vents.mp4" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
+            <div class="title vent-title">Vent embroidery</div>
+            <div class="video-group">
+                <video controls>
+                    <source src="Vents.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <video controls>
+                    <source src="vents_2.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
         </div>
         <div class="video-wrapper">
-            <video controls>
-                <source src="Reinforcement.mp4" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
-            <div class="title">Rivet Reinforcement</div>
+            <div class="video-group">
+                <video controls>
+                    <source src="Reinforcement.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <video controls>
+                    <source src="Reinforcement_2.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <div class="title reinforcement-title">Reinforcement</div>
         </div>
     </div>
 </body>
