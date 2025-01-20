@@ -32,14 +32,12 @@
             flex-direction: column;
             align-items: center;
             gap: 10px;
-            position: relative; /* Make the wrapper position relative for absolute positioning of titles */
         }
 
         .video-group {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 50px; /* Add a margin from the bottom of the title to the top of the video players */
         }
 
         video {
@@ -54,16 +52,11 @@
             font-weight: bold;
             white-space: nowrap;
             font-family: 'Quicksand', sans-serif;
-            position: absolute;
-            top: 0; /* Align the title to the top */
+            margin-bottom: 10px; /* Adds 10px space between title and video player */
         }
 
         .vent-title {
-            left: +230px; /* Adjust position to the left with a margin */
-        }
-
-        .reinforcement-title {
-            right: +240px; /* Adjust position to the right with a margin */
+            margin-right: 10px; /* Adjust position for the title */
         }
     </style>
 </head>
@@ -71,7 +64,7 @@
 <body>
     <div class="video-container">
         <div class="video-wrapper">
-            <div class="title vent-title">Vent embroidery</div>
+            <div class="title vent-title">Vent embroidery + Reinforcement embroidery</div>
             <div class="video-group">
                 <video controls>
                     <source src="Vents.mp4" type="video/mp4">
@@ -81,20 +74,11 @@
                     <source src="vents_2.mp4" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
-            </div>
-        </div>
-        <div class="video-wrapper">
-            <div class="video-group">
                 <video controls>
                     <source src="Reinforcement.mp4" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
-                <video controls>
-                    <source src="Reinforcement_2.mp4" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
             </div>
-            <div class="title reinforcement-title">Reinforcement</div>
         </div>
     </div>
 </body>
