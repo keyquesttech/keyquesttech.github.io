@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Player</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap');
+
+        body {
+            background-color: #eeeeee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Quicksand', sans-serif;
+        }
+
+        .video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .video-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .video-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        video {
+            width: 400px;
+            /* Set the width to 400px */
+            height: 400px;
+            /* Set the height to 400px */
+            object-fit: contain;
+            margin: 10px 0;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            white-space: nowrap;
+            font-family: 'Quicksand', sans-serif;
+            margin-bottom: 10px;
+        }
+
+        .vent-title {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="video-container">
+        <div class="video-wrapper">
+            <div class="video-group">
+                <video controls>
+                    <source src="zipper.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
