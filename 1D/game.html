@@ -17,14 +17,12 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            /* Use dvh (dynamic viewport height) for better mobile browser support */
             min-height: 100vh;
             min-height: 100dvh;
             margin: 0;
             font-family: 'Quicksand', sans-serif;
             color: #333;
             padding: 20px;
-            /* Adds safety edge for small screens */
         }
 
         .game-container {
@@ -33,14 +31,15 @@
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 500px;
-            /* Caps width on desktop */
+            height: 60vh;
+            /* Fixed height relative to screen for consistency */
+            min-height: 400px;
+            max-height: 600px;
             text-align: center;
             display: flex;
             flex-direction: column;
             gap: 15px;
             position: relative;
-
-            /* Mobile Optimization: Adjust padding based on screen width */
             padding: 30px;
         }
 
@@ -48,41 +47,44 @@
             font-size: 24px;
             margin: 0;
             color: #2c3e50;
+            flex-shrink: 0;
+            /* Prevents title from squishing */
         }
 
-        p.description {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 5px;
-            line-height: 1.5;
-        }
-
+        /* The card area now fills all available space */
         .card-area {
-            /* Flexibly grow to fill space, preventing layout shifts */
             flex-grow: 1;
-            min-height: 200px;
-            /* Taller touch area */
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 10px 0;
+            overflow-y: auto;
+            /* Safety scroll for very long content */
         }
 
         #question-text {
-            /* Fluid Typography: Scales between 1.1rem and 1.6rem depending on screen width */
-            font-size: clamp(1.2rem, 5vw, 1.6rem);
+            font-size: clamp(1.2rem, 4vw, 1.6rem);
             font-weight: bold;
-            line-height: 1.4;
+            line-height: 1.5;
             word-wrap: break-word;
+            white-space: pre-wrap;
+            /* Preserves formatting */
         }
 
-        /* Progress Bar Styles */
+        /* Slightly smaller font for the intro text specifically */
+        .intro-text {
+            font-weight: normal !important;
+            font-size: clamp(1rem, 3.5vw, 1.3rem) !important;
+            color: #555;
+        }
+
         .progress-container {
             width: 100%;
             background-color: #f0f0f0;
             border-radius: 10px;
             height: 8px;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .progress-bar {
@@ -97,21 +99,20 @@
             justify-content: space-between;
             font-size: 0.85rem;
             color: #888;
-            margin-top: 2px;
+            margin-top: 5px;
+            flex-shrink: 0;
         }
 
-        /* Button Styles */
         .button-group {
             display: flex;
             gap: 15px;
             justify-content: center;
             margin-top: auto;
-            /* Pushes buttons to bottom if container grows */
+            flex-shrink: 0;
         }
 
         button {
             padding: 16px 24px;
-            /* Larger touch target */
             border: none;
             border-radius: 50px;
             font-family: 'Quicksand', sans-serif;
@@ -120,7 +121,6 @@
             cursor: pointer;
             transition: transform 0.1s, opacity 0.2s;
             touch-action: manipulation;
-            /* Improves tap response on mobile */
         }
 
         button:active {
@@ -131,7 +131,6 @@
             background-color: #333;
             color: white;
             flex-grow: 2;
-            /* Makes the main button wider */
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         }
 
@@ -141,7 +140,6 @@
             color: #888;
             flex-grow: 1;
             display: none;
-            /* Hidden initially */
         }
 
         .btn-skip:hover,
@@ -156,7 +154,6 @@
             font-weight: bold;
         }
 
-        /* Specific tweaks for very small screens (iPhone SE, etc) */
         @media (max-width: 380px) {
             .game-container {
                 padding: 20px;
@@ -164,14 +161,6 @@
 
             h1 {
                 font-size: 20px;
-            }
-
-            p.description {
-                font-size: 12px;
-            }
-
-            .card-area {
-                min-height: 150px;
             }
         }
     </style>
@@ -181,10 +170,6 @@
 
     <div class="game-container">
         <h1>Deep Dive</h1>
-        <p class="description">
-            A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press
-            Shuffle to continue. If you wish to skip a question press the skip button.
-        </p>
 
         <div>
             <div class="progress-container">
@@ -197,12 +182,12 @@
         </div>
 
         <div class="card-area">
-            <div id="question-text">Loading questions...</div>
+            <div id="question-text" class="intro-text">Loading resources...</div>
         </div>
 
         <div class="button-group">
             <button class="btn-skip" onclick="skipQuestion()" id="skip-btn">SKIP</button>
-            <button class="btn-shuffle" onclick="nextQuestion()" id="shuffle-btn">SHUFFLE</button>
+            <button class="btn-shuffle" onclick="nextQuestion()" id="shuffle-btn">START</button>
         </div>
     </div>
 
@@ -214,6 +199,8 @@
         let askedCount = 0;
         let skippedCount = 0;
         let gameStarted = false;
+
+        const instructions = "A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press Shuffle to continue. If you wish to skip a question press the skip button.";
 
         // DOM ELEMENTS
         const questionText = document.getElementById('question-text');
@@ -232,13 +219,14 @@
                 })
                 .then(data => {
                     parseData(data);
-                    questionText.innerText = "Press Shuffle to begin";
+                    // SET INITIAL STATE
+                    questionText.innerText = instructions;
+                    questionText.classList.add("intro-text"); // Style as instruction text
                     progressText.innerText = `0 / ${totalQuestionsCount}`;
                 })
                 .catch(error => {
                     console.error('Error:', error);
                     questionText.innerText = "Error: Could not load questions. Ensure 'qs.html' is in the folder and you are using a server.";
-                    questionText.style.fontSize = "14px";
                     questionText.style.color = "red";
                 });
         };
@@ -259,7 +247,6 @@
             }
 
             totalQuestionsCount = mainQuestions.length + finalStageQuestions.length;
-            progressText.innerText = `0 / ${totalQuestionsCount}`;
         }
 
         function nextQuestion() {
@@ -273,11 +260,15 @@
         }
 
         function handleQuestionSelection() {
+            // FIRST CLICK LOGIC
             if (!gameStarted) {
                 gameStarted = true;
-                skipBtn.style.display = "block";
+                skipBtn.style.display = "block"; // Show skip button
+                shuffleBtn.innerText = "SHUFFLE"; // Change button text
+                questionText.classList.remove("intro-text"); // Remove intro styling to make question bold
             }
 
+            // MAIN GAME LOGIC
             if (mainQuestions.length > 0) {
                 const randomIndex = Math.floor(Math.random() * mainQuestions.length);
                 questionText.innerText = mainQuestions[randomIndex];
