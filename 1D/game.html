@@ -65,7 +65,6 @@
             word-wrap: break-word;
             white-space: pre-wrap;
             transition: color 0.5s ease;
-            /* Smooth color transition */
         }
 
         .intro-text {
@@ -146,7 +145,8 @@
         }
 
         .skipped-count {
-            color: #d35400;
+            color: #ff0000;
+            /* UPDATED TO RED */
             font-weight: bold;
         }
 
@@ -192,13 +192,14 @@
         let mainQuestions = [];
         let finalStageQuestions = [];
         let totalQuestionsCount = 0;
-        let totalFinalCount = 0; // Needed to calculate color fade
-        let finalQuestionsAsked = 0; // Tracks progress within the final stage
         let askedCount = 0;
         let skippedCount = 0;
         let gameStarted = false;
 
         const instructions = "A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press Shuffle to continue. If you wish to skip a question press the skip button.";
+
+        // AUDIO SETUP
+        const skipSound = new Audio('skip.mp3');
 
         // DOM ELEMENTS
         const questionText = document.getElementById('question-text');
@@ -242,9 +243,6 @@
                 finalStageQuestions = parts[1].split('\n')
                     .map(line => line.trim())
                     .filter(line => line.length > 0);
-
-                // Store total for color calculation
-                totalFinalCount = finalStageQuestions.length;
             }
 
             totalQuestionsCount = mainQuestions.length + finalStageQuestions.length;
@@ -255,6 +253,10 @@
         }
 
         function skipQuestion() {
+            // PLAY SOUND
+            skipSound.currentTime = 0;
+            skipSound.play().catch(e => console.log("Audio play failed:", e));
+
             skippedCount++;
             skipDisplay.innerText = `Skipped: ${skippedCount}`;
             handleQuestionSelection();
@@ -274,7 +276,7 @@
                 // RANDOM STAGE
                 const randomIndex = Math.floor(Math.random() * mainQuestions.length);
                 questionText.innerText = mainQuestions[randomIndex];
-                questionText.style.color = "#333"; // Ensure text is black
+                questionText.style.color = "#333";
                 mainQuestions.splice(randomIndex, 1);
                 askedCount++;
             } else if (finalStageQuestions.length > 0) {
@@ -282,24 +284,9 @@
                 questionText.innerText = finalStageQuestions[0];
                 finalStageQuestions.shift();
 
-                // COLOR TRANSITION LOGIC
-                // Calculate how far we are (0 to 1)
-                let progressRatio = 0;
-                if (totalFinalCount > 1) {
-                    progressRatio = finalQuestionsAsked / (totalFinalCount - 1);
-                } else {
-                    progressRatio = 1; // If only 1 question, jump to end color
-                }
+                // COLOR LOGIC: GREEN
+                questionText.style.color = "#4CAF50";
 
-                // Transition: HSL(30, 90%, 40%) [Orange] -> HSL(0, 90%, 35%) [Deep Red]
-                // Start Hue: 30, End Hue: 0
-                const currentHue = 30 - (30 * progressRatio);
-                // Slightly darken the lightness as well (40% -> 30%)
-                const currentLightness = 40 - (10 * progressRatio);
-
-                questionText.style.color = `hsl(${currentHue}, 90%, ${currentLightness}%)`;
-
-                finalQuestionsAsked++;
                 askedCount++;
             } else {
                 finishGame();
