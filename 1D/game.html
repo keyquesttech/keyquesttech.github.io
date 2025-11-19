@@ -32,7 +32,6 @@
             width: 100%;
             max-width: 500px;
             height: 60vh;
-            /* Fixed height relative to screen for consistency */
             min-height: 400px;
             max-height: 600px;
             text-align: center;
@@ -48,10 +47,8 @@
             margin: 0;
             color: #2c3e50;
             flex-shrink: 0;
-            /* Prevents title from squishing */
         }
 
-        /* The card area now fills all available space */
         .card-area {
             flex-grow: 1;
             display: flex;
@@ -59,7 +56,6 @@
             align-items: center;
             padding: 10px 0;
             overflow-y: auto;
-            /* Safety scroll for very long content */
         }
 
         #question-text {
@@ -68,10 +64,10 @@
             line-height: 1.5;
             word-wrap: break-word;
             white-space: pre-wrap;
-            /* Preserves formatting */
+            transition: color 0.5s ease;
+            /* Smooth color transition */
         }
 
-        /* Slightly smaller font for the intro text specifically */
         .intro-text {
             font-weight: normal !important;
             font-size: clamp(1rem, 3.5vw, 1.3rem) !important;
@@ -196,6 +192,8 @@
         let mainQuestions = [];
         let finalStageQuestions = [];
         let totalQuestionsCount = 0;
+        let totalFinalCount = 0; // Needed to calculate color fade
+        let finalQuestionsAsked = 0; // Tracks progress within the final stage
         let askedCount = 0;
         let skippedCount = 0;
         let gameStarted = false;
@@ -221,7 +219,7 @@
                     parseData(data);
                     // SET INITIAL STATE
                     questionText.innerText = instructions;
-                    questionText.classList.add("intro-text"); // Style as instruction text
+                    questionText.classList.add("intro-text");
                     progressText.innerText = `0 / ${totalQuestionsCount}`;
                 })
                 .catch(error => {
@@ -244,6 +242,9 @@
                 finalStageQuestions = parts[1].split('\n')
                     .map(line => line.trim())
                     .filter(line => line.length > 0);
+
+                // Store total for color calculation
+                totalFinalCount = finalStageQuestions.length;
             }
 
             totalQuestionsCount = mainQuestions.length + finalStageQuestions.length;
@@ -263,22 +264,43 @@
             // FIRST CLICK LOGIC
             if (!gameStarted) {
                 gameStarted = true;
-                skipBtn.style.display = "block"; // Show skip button
-                shuffleBtn.innerText = "SHUFFLE"; // Change button text
-                questionText.classList.remove("intro-text"); // Remove intro styling to make question bold
+                skipBtn.style.display = "block";
+                shuffleBtn.innerText = "SHUFFLE";
+                questionText.classList.remove("intro-text");
             }
 
-            // MAIN GAME LOGIC
+            // LOGIC
             if (mainQuestions.length > 0) {
+                // RANDOM STAGE
                 const randomIndex = Math.floor(Math.random() * mainQuestions.length);
                 questionText.innerText = mainQuestions[randomIndex];
+                questionText.style.color = "#333"; // Ensure text is black
                 mainQuestions.splice(randomIndex, 1);
                 askedCount++;
             } else if (finalStageQuestions.length > 0) {
+                // FINAL STAGE (Ordered)
                 questionText.innerText = finalStageQuestions[0];
                 finalStageQuestions.shift();
+
+                // COLOR TRANSITION LOGIC
+                // Calculate how far we are (0 to 1)
+                let progressRatio = 0;
+                if (totalFinalCount > 1) {
+                    progressRatio = finalQuestionsAsked / (totalFinalCount - 1);
+                } else {
+                    progressRatio = 1; // If only 1 question, jump to end color
+                }
+
+                // Transition: HSL(30, 90%, 40%) [Orange] -> HSL(0, 90%, 35%) [Deep Red]
+                // Start Hue: 30, End Hue: 0
+                const currentHue = 30 - (30 * progressRatio);
+                // Slightly darken the lightness as well (40% -> 30%)
+                const currentLightness = 40 - (10 * progressRatio);
+
+                questionText.style.color = `hsl(${currentHue}, 90%, ${currentLightness}%)`;
+
+                finalQuestionsAsked++;
                 askedCount++;
-                questionText.style.color = "#d35400";
             } else {
                 finishGame();
                 return;
