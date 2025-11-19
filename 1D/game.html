@@ -17,12 +17,15 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            /* Dynamic height handling for mobile browsers */
             min-height: 100vh;
             min-height: 100dvh;
             margin: 0;
             font-family: 'Quicksand', sans-serif;
             color: #333;
             padding: 20px;
+            -webkit-tap-highlight-color: transparent;
+            /* Removes blue tap box on Android */
         }
 
         .game-container {
@@ -49,6 +52,7 @@
             flex-shrink: 0;
         }
 
+        /* CONTENT AREA */
         .card-area {
             flex-grow: 1;
             display: flex;
@@ -64,13 +68,24 @@
             line-height: 1.5;
             word-wrap: break-word;
             white-space: pre-wrap;
-            transition: color 0.5s ease;
+            opacity: 1;
+            transition: color 0.3s ease, opacity 0.3s ease;
+        }
+
+        /* Animation class for transitions */
+        .fade-out {
+            opacity: 0 !important;
         }
 
         .intro-text {
             font-weight: normal !important;
             font-size: clamp(1rem, 3.5vw, 1.3rem) !important;
-            color: #555;
+            color: #555 !important;
+        }
+
+        /* PROGRESS BAR */
+        .progress-wrapper {
+            flex-shrink: 0;
         }
 
         .progress-container {
@@ -79,7 +94,6 @@
             border-radius: 10px;
             height: 8px;
             overflow: hidden;
-            flex-shrink: 0;
         }
 
         .progress-bar {
@@ -95,9 +109,15 @@
             font-size: 0.85rem;
             color: #888;
             margin-top: 5px;
-            flex-shrink: 0;
         }
 
+        .skipped-count {
+            color: #ff0000;
+            /* RED */
+            font-weight: bold;
+        }
+
+        /* BUTTONS */
         .button-group {
             display: flex;
             gap: 15px;
@@ -114,8 +134,10 @@
             font-weight: bold;
             font-size: 16px;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
+            transition: transform 0.1s, opacity 0.2s, background-color 0.2s;
             touch-action: manipulation;
+            user-select: none;
+            /* Prevents text highlighting */
         }
 
         button:active {
@@ -144,12 +166,7 @@
             background-color: #f9f9f9;
         }
 
-        .skipped-count {
-            color: #ff0000;
-            /* UPDATED TO RED */
-            font-weight: bold;
-        }
-
+        /* Small Screen Tweaks */
         @media (max-width: 380px) {
             .game-container {
                 padding: 20px;
@@ -167,7 +184,7 @@
     <div class="game-container">
         <h1>Deep Dive</h1>
 
-        <div>
+        <div class="progress-wrapper">
             <div class="progress-container">
                 <div class="progress-bar" id="progress-bar"></div>
             </div>
@@ -188,7 +205,12 @@
     </div>
 
     <script>
-        // STATE VARIABLES
+        // --- CONFIGURATION ---
+        const INSTRUCTIONS_TEXT = "A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press Shuffle to continue. If you wish to skip a question press the skip button.";
+        const COLOR_FINAL = "#4CAF50"; // Green
+        const COLOR_DEFAULT = "#333333"; // Black/Grey
+
+        // --- STATE ---
         let mainQuestions = [];
         let finalStageQuestions = [];
         let totalQuestionsCount = 0;
@@ -196,121 +218,132 @@
         let skippedCount = 0;
         let gameStarted = false;
 
-        const instructions = "A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press Shuffle to continue. If you wish to skip a question press the skip button.";
-
-        // AUDIO SETUP
+        // --- AUDIO ---
         const skipSound = new Audio('skip.mp3');
+        skipSound.preload = 'auto'; // Optimize for mobile
 
-        // DOM ELEMENTS
-        const questionText = document.getElementById('question-text');
-        const progressBar = document.getElementById('progress-bar');
-        const progressText = document.getElementById('progress-text');
-        const skipDisplay = document.getElementById('skip-display');
-        const skipBtn = document.getElementById('skip-btn');
-        const shuffleBtn = document.getElementById('shuffle-btn');
+        // --- DOM ELEMENTS ---
+        const ui = {
+            text: document.getElementById('question-text'),
+            bar: document.getElementById('progress-bar'),
+            progressLabel: document.getElementById('progress-text'),
+            skipLabel: document.getElementById('skip-display'),
+            btnSkip: document.getElementById('skip-btn'),
+            btnShuffle: document.getElementById('shuffle-btn')
+        };
 
-        // LOAD QUESTIONS ON STARTUP
-        window.onload = function () {
-            fetch('qs.html')
-                .then(response => {
-                    if (!response.ok) throw new Error("Network response was not ok");
-                    return response.text();
-                })
-                .then(data => {
-                    parseData(data);
-                    // SET INITIAL STATE
-                    questionText.innerText = instructions;
-                    questionText.classList.add("intro-text");
-                    progressText.innerText = `0 / ${totalQuestionsCount}`;
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    questionText.innerText = "Error: Could not load questions. Ensure 'qs.html' is in the folder and you are using a server.";
-                    questionText.style.color = "red";
-                });
+        // --- INITIALIZATION ---
+        window.onload = async function () {
+            try {
+                const response = await fetch('qs.html');
+                if (!response.ok) throw new Error("File not found");
+                const text = await response.text();
+
+                parseData(text);
+
+                // Set UI to Ready State
+                ui.text.innerText = INSTRUCTIONS_TEXT;
+                ui.text.classList.add("intro-text");
+                ui.progressLabel.innerText = `0 / ${totalQuestionsCount}`;
+            } catch (error) {
+                console.error(error);
+                ui.text.innerText = "Error: Could not load 'qs.html'.\nEnsure you are using a local server.";
+                ui.text.style.color = "red";
+            }
         };
 
         function parseData(text) {
             const parts = text.split('---START ORDERED QUESTIONS---');
 
-            if (parts[0]) {
-                mainQuestions = parts[0].split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
-            }
-
-            if (parts[1]) {
-                finalStageQuestions = parts[1].split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
-            }
+            if (parts[0]) mainQuestions = cleanList(parts[0]);
+            if (parts[1]) finalStageQuestions = cleanList(parts[1]);
 
             totalQuestionsCount = mainQuestions.length + finalStageQuestions.length;
         }
 
+        function cleanList(rawString) {
+            return rawString.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        }
+
+        // --- GAME LOGIC ---
+
         function nextQuestion() {
-            handleQuestionSelection();
+            updateGameState();
         }
 
         function skipQuestion() {
-            // PLAY SOUND
+            // Play Sound
             skipSound.currentTime = 0;
-            skipSound.play().catch(e => console.log("Audio play failed:", e));
+            skipSound.play().catch(e => console.warn("Audio blocked or missing:", e));
 
+            // Update Stats
             skippedCount++;
-            skipDisplay.innerText = `Skipped: ${skippedCount}`;
-            handleQuestionSelection();
+            ui.skipLabel.innerText = `Skipped: ${skippedCount}`;
+
+            updateGameState();
         }
 
-        function handleQuestionSelection() {
-            // FIRST CLICK LOGIC
+        function updateGameState() {
+            // 1. Initialize on first click
             if (!gameStarted) {
                 gameStarted = true;
-                skipBtn.style.display = "block";
-                shuffleBtn.innerText = "SHUFFLE";
-                questionText.classList.remove("intro-text");
+                ui.btnSkip.style.display = "block";
+                ui.btnShuffle.innerText = "SHUFFLE";
+                ui.text.classList.remove("intro-text");
             }
 
-            // LOGIC
+            // 2. Transition Animation (Fade Out)
+            ui.text.classList.add('fade-out');
+
+            // 3. Wait for fade out (300ms), then change text and Fade In
+            setTimeout(() => {
+                selectContent();
+                ui.text.classList.remove('fade-out');
+                updateProgress();
+            }, 300);
+        }
+
+        function selectContent() {
             if (mainQuestions.length > 0) {
-                // RANDOM STAGE
+                // Random Phase
                 const randomIndex = Math.floor(Math.random() * mainQuestions.length);
-                questionText.innerText = mainQuestions[randomIndex];
-                questionText.style.color = "#333";
+                ui.text.innerText = mainQuestions[randomIndex];
+                ui.text.style.color = COLOR_DEFAULT;
+
                 mainQuestions.splice(randomIndex, 1);
                 askedCount++;
+
             } else if (finalStageQuestions.length > 0) {
-                // FINAL STAGE (Ordered)
-                questionText.innerText = finalStageQuestions[0];
+                // Final Ordered Phase
+                ui.text.innerText = finalStageQuestions[0];
+                ui.text.style.color = COLOR_FINAL; // Green
+
                 finalStageQuestions.shift();
-
-                // COLOR LOGIC: GREEN
-                questionText.style.color = "#4CAF50";
-
                 askedCount++;
-            } else {
-                finishGame();
-                return;
-            }
 
-            updateProgress();
+            } else {
+                // End Game
+                finishGame();
+            }
         }
 
         function finishGame() {
-            questionText.innerText = "You have completed all questions.";
-            questionText.style.color = "#333";
-            skipBtn.style.display = "none";
-            shuffleBtn.innerText = "Play Again";
-            shuffleBtn.onclick = function () { location.reload(); };
-            progressBar.style.width = "100%";
-            progressText.innerText = `${totalQuestionsCount} / ${totalQuestionsCount}`;
+            ui.text.innerText = "You have completed all questions.";
+            ui.text.style.color = COLOR_DEFAULT;
+            ui.btnSkip.style.display = "none";
+            ui.btnShuffle.innerText = "Play Again";
+            ui.btnShuffle.onclick = () => location.reload();
+
+            // Force progress bar to full
+            ui.bar.style.width = "100%";
+            ui.progressLabel.innerText = `${totalQuestionsCount} / ${totalQuestionsCount}`;
         }
 
         function updateProgress() {
             if (totalQuestionsCount === 0) return;
             const percentage = (askedCount / totalQuestionsCount) * 100;
-            progressBar.style.width = percentage + "%";
-            progressText.innerText = `${askedCount} / ${totalQuestionsCount}`;
+            ui.bar.style.width = percentage + "%";
+            ui.progressLabel.innerText = `${askedCount} / ${totalQuestionsCount}`;
         }
     </script>
 </body>
