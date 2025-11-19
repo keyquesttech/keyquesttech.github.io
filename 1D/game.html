@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Game</title>
+    <style>
+        /* Importing the font from your home.html */
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap');
+
+        body {
+            background-color: #eeeeee;
+            /* Matches home.html */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Quicksand', sans-serif;
+            /* Matches home.html */
+            color: #333;
+        }
+
+        .game-container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        p.description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        .card-area {
+            min-height: 150px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        #question-text {
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1.4;
+        }
+
+        /* Progress Bar Styles */
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        /* Button Styles */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 50px;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-shuffle {
+            background-color: #333;
+            color: white;
+            flex-grow: 1;
+        }
+
+        .btn-skip {
+            background-color: transparent;
+            border: 2px solid #ccc;
+            color: #666;
+        }
+
+        .btn-skip:hover {
+            border-color: #999;
+            color: #333;
+        }
+
+        /* Start screen overlay logic */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="game-container">
+        <h1>Deep Dive</h1>
+        <p class="description">
+            A game to skip the small talk. Questions will appear randomly.
+            Answer truthfully, then press Shuffle to continue.
+        </p>
+
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="progress-text" id="progress-text">0 / 0 Questions</div>
+
+        <div class="card-area">
+            <div id="question-text">Press Shuffle to begin</div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-skip" onclick="nextQuestion()" id="skip-btn" disabled>SKIP</button>
+            <button class="btn-shuffle" onclick="nextQuestion()" id="shuffle-btn">SHUFFLE</button>
+        </div>
+    </div>
+
+    <script>
+        // DATA: Sourced directly from qs.html
+
+        // Lines 1-86 (The Main Pool)
+        const mainQuestions = [
+            "If you had to make money in an unethical way how would you do it?",
+            "If you had to replace all of the grass in the world what would you replace it with?",
+            "Do you identify with a fairy, mermaid, princess, witch, pirate or samurai? Why?",
+            "What is a compliment you wish you received more often?",
+            "What title would you give this chapter in your life?",
+            "What question are you trying to answer most in your life right now?",
+            "What question do you wish you could ask with no repercussions or judgment?",
+            "What is the most unexplainable thing that's ever happened to you?",
+            "In one word describe how you feel right now.",
+            "Based on what you know about me, do you have any song/movie/show recommendations?",
+            "How do our personalities complement each other?",
+            "Do I seem like a coffee or tea person? Sweetened or unsweetened?",
+            "What parts of yourself do you see in me?",
+            "Describe your perfect day.",
+            "What do you think I should know about myself that perhaps I'm unaware of?",
+            "How can you become a better person?",
+            "As a child what do you think I wanted to be?",
+            "What is a dream you've let go of?",
+            "Do I remind you of anyone?",
+            "Do you think I intimidate others? Why or why not?",
+            "What does my phone tell you about me?",
+            "What compliment do you think I hear the most?",
+            "What do you think I'm most likely to splurge on?",
+            "What about me intrigues you?",
+            "Do you think I was popular in school? Explain.",
+            "Do I seem like a cat or dog person?",
+            "What role would I play in a movie?",
+            "If you were to give me something knowing nothing about me other than what I look like, what would it be?",
+            "What would your younger self not believe about your life today?",
+            "Do I look kind? Explain.",
+            "Do you think the image you have of yourself matches the image people see you as?",
+            "Do you think plants die or thrive in my care? Explain.",
+            "What about me is most strange or unfamiliar to you?",
+            "What about me is the most intriguing thing to you? Explain.",
+            "What do you think is the hardest part of what I do for a living?",
+            "What does my Instagram tell you about me?",
+            "Make an assumption about me.",
+            "What is my body language telling you right now?",
+            "How likely am I to go camping? How high maintenance is my setup?",
+            "What's the first thing you noticed about me?",
+            "Do you think I fall in love easily? Why or why not?",
+            "Do you think I've ever checked an ex's phone for evidence?",
+            "Do I seem creative?",
+            "Who do you think my celebrity crush is?",
+            "Do I seem like a morning person or night owl? Why?",
+            "Has a stranger ever changed your life?",
+            "What's been the best compliment a stranger has ever given you?",
+            "Do you think I'm usually early, on time or late? Explain.",
+            "How are you really?",
+            "What do you crave more of?",
+            "Why do you think we met?",
+            "What is something you wouldn't want to change about yourself?",
+            "What do you think our most important similarity is?",
+            "What do my shoes/socks tell you about me?",
+            "What would be the perfect gift for me?",
+            "What was your first impression of me?",
+            "What can we create together?",
+            "What do you admire most about me?",
+            "What do you think my superpower is?",
+            "What do you think my weakness is?",
+            "In one word how would you describe our conversation?",
+            "What about me is hardest for you to understand?",
+            "What do you think my defining characteristic is?",
+            "What answer of mine made you light up?",
+            "What am I most qualified to give advice about?",
+            "Give the other party a compliment you don't think they hear enough.",
+            "Do you believe everyone has a calling? If so, do you think I've found mine?",
+            "What would make you feel closer to me?",
+            "What do you think I fear the most?",
+            "How would you describe me to your friends?",
+            "How does one earn your vulnerability? Have I earned it? How can I earn more?",
+            "What about me most surprised you?",
+            "What can I help you with?",
+            "Based on what you learned about me, does my social media accurately reflect who I am? Why or why not?",
+            "Admit something.",
+            "Have you changed your mind about anything recently?",
+            "What lesson took you the longest to unlearn?",
+            "How would you describe the feeling of being in love in one word?",
+            "Staring contest: first to blink must reveal a personal problem and ask for advice on how to handle it.",
+            "Swap seats.",
+            "Create a secret handshake.",
+            "What's the most pain you've been in that wasn't physical?",
+            "Are you lying to yourself about anything?",
+            "Is there a feeling you miss?",
+            "What is the last thing you lied to your mother about?",
+            "When was the last time you surprised yourself?"
+        ];
+
+        // Lines 88-90 (The Final Sequence)
+        const finalQuestions = [
+            "When in this game did you feel most connected to me?",
+            "When this game is over what will you remember about me?",
+            "Write a message (text, paper, etc). Open/send only after you have parted."
+        ];
+
+        // GAME STATE
+        // We make a copy of the main questions so we can remove them as we go (no repeats)
+        let availableQuestions = [...mainQuestions];
+        // We keep the final questions separate to trigger at the end
+        let finalStageQuestions = [...finalQuestions];
+
+        let totalQuestionsCount = mainQuestions.length + finalQuestions.length;
+        let askedCount = 0;
+        let gameStarted = false;
+
+        // DOM ELEMENTS
+        const questionText = document.getElementById('question-text');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const skipBtn = document.getElementById('skip-btn');
+        const shuffleBtn = document.getElementById('shuffle-btn');
+
+        // Initialize UI
+        progressText.innerText = `0 / ${totalQuestionsCount}`;
+
+        function nextQuestion() {
+            if (!gameStarted) {
+                gameStarted = true;
+                skipBtn.disabled = false; // Enable skip button after start
+            }
+
+            // Check if we still have main questions
+            if (availableQuestions.length > 0) {
+                // Pick a random index from available questions
+                const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+
+                // Set the text
+                questionText.innerText = availableQuestions[randomIndex];
+
+                // Remove that question so it doesn't repeat
+                availableQuestions.splice(randomIndex, 1);
+
+                askedCount++;
+
+            } else if (finalStageQuestions.length > 0) {
+                // LOGIC: Once all main questions are done, ask final questions in order
+                questionText.innerText = finalStageQuestions[0]; // Take the first one
+                finalStageQuestions.shift(); // Remove it from the array
+
+                askedCount++;
+
+                // Visual cue that we are in the final stage
+                questionText.style.color = "#d35400";
+            } else {
+                // Game Over State
+                questionText.innerText = "You have completed all questions.";
+                questionText.style.color = "#333";
+                skipBtn.style.display = "none";
+                shuffleBtn.innerText = "Reset Game";
+                shuffleBtn.onclick = function () { location.reload(); };
+                progressBar.style.width = "100%";
+                progressText.innerText = `${totalQuestionsCount} / ${totalQuestionsCount}`;
+                return;
+            }
+
+            updateProgress();
+        }
+
+        function updateProgress() {
+            const percentage = (askedCount / totalQuestionsCount) * 100;
+            progressBar.style.width = percentage + "%";
+            progressText.innerText = `${askedCount} / ${totalQuestionsCount}`;
+        }
+
+    </script>
+</body>
+
+</html>

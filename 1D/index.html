@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Game</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap');
+
+        body {
+            background-color: #eeeeee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Quicksand', sans-serif;
+            color: #333;
+        }
+
+        .game-container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        p.description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        .card-area {
+            min-height: 150px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        #question-text {
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1.4;
+        }
+
+        /* Progress Bar Styles */
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        /* Button Styles */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 50px;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-shuffle {
+            background-color: #333;
+            color: white;
+            flex-grow: 1;
+        }
+
+        .btn-skip {
+            background-color: transparent;
+            border: 2px solid #ccc;
+            color: #666;
+            display: none;
+            /* Hidden initially */
+        }
+
+        .btn-skip:hover {
+            border-color: #999;
+            color: #333;
+        }
+
+        .skipped-count {
+            color: #d35400;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="game-container">
+        <h1>Deep Dive</h1>
+        <p class="description">
+            A game to skip the small talk. Questions and challenges will appear randomly.
+            Answer truthfully, then press Shuffle to continue.
+            If you wish to skip a question press the skip button.
+        </p>
+
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="stats-row">
+            <span id="progress-text">Loading...</span>
+            <span class="skipped-count" id="skip-display">Skipped: 0</span>
+        </div>
+
+        <div class="card-area">
+            <div id="question-text">Loading questions...</div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-skip" onclick="skipQuestion()" id="skip-btn">SKIP</button>
+            <button class="btn-shuffle" onclick="nextQuestion()" id="shuffle-btn">SHUFFLE</button>
+        </div>
+    </div>
+
+    <script>
+        // STATE VARIABLES
+        let mainQuestions = [];
+        let finalStageQuestions = [];
+        let totalQuestionsCount = 0;
+        let askedCount = 0;
+        let skippedCount = 0;
+        let gameStarted = false;
+
+        // DOM ELEMENTS
+        const questionText = document.getElementById('question-text');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const skipDisplay = document.getElementById('skip-display');
+        const skipBtn = document.getElementById('skip-btn');
+        const shuffleBtn = document.getElementById('shuffle-btn');
+
+        // LOAD QUESTIONS ON STARTUP
+        window.onload = function () {
+            fetch('qs.html')
+                .then(response => {
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.text();
+                })
+                .then(data => {
+                    parseData(data);
+                    questionText.innerText = "Press Shuffle to begin";
+                    progressText.innerText = `0 / ${totalQuestionsCount}`;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    questionText.innerText = "Error: Could not load 'qs.html'. Make sure you are running a local server (CORS).";
+                });
+        };
+
+        function parseData(text) {
+            // Split file by the specific separator line
+            const parts = text.split('---START ORDERED QUESTIONS---');
+
+            // Process random pool (Part 1)
+            if (parts[0]) {
+                mainQuestions = parts[0].split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0); // remove empty lines
+            }
+
+            // Process ordered pool (Part 2)
+            if (parts[1]) {
+                finalStageQuestions = parts[1].split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+            }
+
+            totalQuestionsCount = mainQuestions.length + finalStageQuestions.length;
+        }
+
+        function nextQuestion() {
+            handleQuestionSelection();
+        }
+
+        function skipQuestion() {
+            skippedCount++;
+            skipDisplay.innerText = `Skipped: ${skippedCount}`;
+            handleQuestionSelection();
+        }
+
+        function handleQuestionSelection() {
+            // First click logic
+            if (!gameStarted) {
+                gameStarted = true;
+                skipBtn.style.display = "block"; // Show skip button
+            }
+
+            // Check if we still have main questions
+            if (mainQuestions.length > 0) {
+                // Pick a random index
+                const randomIndex = Math.floor(Math.random() * mainQuestions.length);
+
+                // Set the text
+                questionText.innerText = mainQuestions[randomIndex];
+
+                // Remove that question so it doesn't repeat
+                mainQuestions.splice(randomIndex, 1);
+
+                askedCount++;
+
+            } else if (finalStageQuestions.length > 0) {
+                // LOGIC: Ordered questions
+                questionText.innerText = finalStageQuestions[0];
+                finalStageQuestions.shift(); // Remove from array
+
+                askedCount++;
+
+                // Visual cue for final stage
+                questionText.style.color = "#d35400";
+
+            } else {
+                // Game Over State
+                finishGame();
+                return;
+            }
+
+            updateProgress();
+        }
+
+        function finishGame() {
+            questionText.innerText = "You have completed all questions.";
+            questionText.style.color = "#333";
+            skipBtn.style.display = "none";
+            shuffleBtn.innerText = "Play Again";
+            shuffleBtn.onclick = function () { location.reload(); };
+
+            // Max out progress bar visually
+            progressBar.style.width = "100%";
+            progressText.innerText = `${totalQuestionsCount} / ${totalQuestionsCount}`;
+        }
+
+        function updateProgress() {
+            // Prevent division by zero or > 100%
+            if (totalQuestionsCount === 0) return;
+
+            const percentage = (askedCount / totalQuestionsCount) * 100;
+            progressBar.style.width = percentage + "%";
+            progressText.innerText = `${askedCount} / ${totalQuestionsCount}`;
+        }
+
+    </script>
+</body>
+
+</html>
