@@ -58,17 +58,29 @@
             align-items: center;
             padding: 10px 0;
             overflow-y: auto;
+            /* Allow scroll if absolutely necessary */
+
+            /* HIDE SCROLLBARS (Cross-browser) */
+            scrollbar-width: none;
+            /* Firefox */
+            -ms-overflow-style: none;
+            /* IE/Edge */
+        }
+
+        /* Hide scrollbar for Chrome/Safari/Opera */
+        .card-area::-webkit-scrollbar {
+            display: none;
         }
 
         #question-text {
-            font-size: clamp(1.2rem, 4vw, 1.6rem);
             font-weight: bold;
-            line-height: 1.5;
+            line-height: 1.4;
             word-wrap: break-word;
             white-space: pre-wrap;
-            /* Essential for showing the line breaks */
             opacity: 1;
-            transition: color 0.3s ease, opacity 0.3s ease;
+            transition: opacity 0.3s ease;
+            /* Removed color transition to prevent conflicting with scaler */
+            width: 100%;
         }
 
         /* Animation class */
@@ -79,7 +91,6 @@
         /* Specific style for the instructions */
         .intro-text {
             font-weight: normal !important;
-            font-size: clamp(1rem, 3.5vw, 1.3rem) !important;
             color: #555 !important;
         }
 
@@ -191,7 +202,7 @@
             </div>
         </div>
 
-        <div class="card-area">
+        <div class="card-area" id="card-container">
             <div id="question-text" class="intro-text">Loading resources...</div>
         </div>
 
@@ -203,11 +214,13 @@
 
     <script>
         // --- CONFIGURATION ---
-        // Updated text with line breaks (\n\n) for spacing
         const INSTRUCTIONS_TEXT = "Questions and challenges will appear randomly.\n\nParticipants take turns pressing the shuffle button. Both parties must answer the question.\n\nIf you wish to skip a question press the skip button.";
-
         const COLOR_FINAL = "#4CAF50"; // Green
         const COLOR_DEFAULT = "#333333"; // Black/Grey
+
+        // Text Sizing Configuration
+        const MAX_FONT_SIZE = 26; // Maximum px size
+        const MIN_FONT_SIZE = 14; // Minimum px size
 
         // --- STATE ---
         let mainQuestions = [];
@@ -223,6 +236,7 @@
 
         // --- DOM ELEMENTS ---
         const ui = {
+            container: document.getElementById('card-container'),
             text: document.getElementById('question-text'),
             bar: document.getElementById('progress-bar'),
             progressLabel: document.getElementById('progress-text'),
@@ -243,6 +257,7 @@
                 // Set UI to Ready State
                 ui.text.innerText = INSTRUCTIONS_TEXT;
                 ui.text.classList.add("intro-text");
+                fitTextToContainer(); // Run scaler immediately for instructions
                 ui.progressLabel.innerText = `0 / ${totalQuestionsCount}`;
             } catch (error) {
                 console.error(error);
@@ -250,6 +265,9 @@
                 ui.text.style.color = "red";
             }
         };
+
+        // Handle resize to keep text fitting if window changes
+        window.onresize = fitTextToContainer;
 
         function parseData(text) {
             const parts = text.split('---START ORDERED QUESTIONS---');
@@ -271,11 +289,9 @@
         }
 
         function skipQuestion() {
-            // Play Sound
             skipSound.currentTime = 0;
             skipSound.play().catch(e => console.warn("Audio blocked or missing:", e));
 
-            // Update Stats
             skippedCount++;
             ui.skipLabel.innerText = `Skipped: ${skippedCount}`;
 
@@ -283,25 +299,24 @@
         }
 
         function updateGameState() {
-            // 1. Button Logic (Happens instantly)
             if (!gameStarted) {
                 gameStarted = true;
                 ui.btnSkip.style.display = "block";
                 ui.btnShuffle.innerText = "SHUFFLE";
             }
 
-            // 2. Transition Animation (Fade Out)
+            // Start Fade Out
             ui.text.classList.add('fade-out');
 
-            // 3. Wait for fade out to finish (300ms)
             setTimeout(() => {
-                // Remove intro styling now that text is invisible
                 ui.text.classList.remove("intro-text");
 
-                // Select new content
                 selectContent();
 
-                // Fade back in
+                // KEY CHANGE: Scale text while invisible to prevent "jumping"
+                fitTextToContainer();
+
+                // Start Fade In
                 ui.text.classList.remove('fade-out');
                 updateProgress();
             }, 300);
@@ -309,7 +324,6 @@
 
         function selectContent() {
             if (mainQuestions.length > 0) {
-                // Random Phase
                 const randomIndex = Math.floor(Math.random() * mainQuestions.length);
                 ui.text.innerText = mainQuestions[randomIndex];
                 ui.text.style.color = COLOR_DEFAULT;
@@ -318,7 +332,6 @@
                 askedCount++;
 
             } else if (finalStageQuestions.length > 0) {
-                // Final Ordered Phase
                 ui.text.innerText = finalStageQuestions[0];
                 ui.text.style.color = COLOR_FINAL;
 
@@ -326,14 +339,35 @@
                 askedCount++;
 
             } else {
-                // End Game
                 finishGame();
+            }
+        }
+
+        /**
+         * Smart Font Scaling Function
+         * Reduces font size until the text fits within the container height.
+         */
+        function fitTextToContainer() {
+            let size = MAX_FONT_SIZE;
+            ui.text.style.fontSize = size + "px"; // Start max
+
+            // While text is taller than container OR wider than container (rare), shrink it.
+            // We check scrollHeight vs clientHeight of the container.
+            // We use a loop to decrement size.
+            while (
+                (ui.container.scrollHeight > ui.container.clientHeight) &&
+                size > MIN_FONT_SIZE
+            ) {
+                size--;
+                ui.text.style.fontSize = size + "px";
             }
         }
 
         function finishGame() {
             ui.text.innerText = "You have completed all questions.";
             ui.text.style.color = COLOR_DEFAULT;
+            fitTextToContainer();
+
             ui.btnSkip.style.display = "none";
             ui.btnShuffle.innerText = "Play Again";
             ui.btnShuffle.onclick = () => location.reload();
