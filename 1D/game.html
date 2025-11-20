@@ -17,7 +17,6 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            /* Dynamic height handling for mobile browsers */
             min-height: 100vh;
             min-height: 100dvh;
             margin: 0;
@@ -25,7 +24,6 @@
             color: #333;
             padding: 20px;
             -webkit-tap-highlight-color: transparent;
-            /* Removes blue tap box on Android */
         }
 
         .game-container {
@@ -68,15 +66,17 @@
             line-height: 1.5;
             word-wrap: break-word;
             white-space: pre-wrap;
+            /* Essential for showing the line breaks */
             opacity: 1;
             transition: color 0.3s ease, opacity 0.3s ease;
         }
 
-        /* Animation class for transitions */
+        /* Animation class */
         .fade-out {
             opacity: 0 !important;
         }
 
+        /* Specific style for the instructions */
         .intro-text {
             font-weight: normal !important;
             font-size: clamp(1rem, 3.5vw, 1.3rem) !important;
@@ -113,7 +113,6 @@
 
         .skipped-count {
             color: #ff0000;
-            /* RED */
             font-weight: bold;
         }
 
@@ -137,7 +136,6 @@
             transition: transform 0.1s, opacity 0.2s, background-color 0.2s;
             touch-action: manipulation;
             user-select: none;
-            /* Prevents text highlighting */
         }
 
         button:active {
@@ -166,7 +164,6 @@
             background-color: #f9f9f9;
         }
 
-        /* Small Screen Tweaks */
         @media (max-width: 380px) {
             .game-container {
                 padding: 20px;
@@ -206,7 +203,9 @@
 
     <script>
         // --- CONFIGURATION ---
-        const INSTRUCTIONS_TEXT = "A game to skip the small talk. Questions and challenges will appear randomly. Answer truthfully, then press Shuffle to continue. If you wish to skip a question press the skip button.";
+        // Updated text with line breaks (\n\n) for spacing
+        const INSTRUCTIONS_TEXT = "Questions and challenges will appear randomly.\n\nParticipants take turns pressing the shuffle button. Both parties must answer the question.\n\nIf you wish to skip a question press the skip button.";
+
         const COLOR_FINAL = "#4CAF50"; // Green
         const COLOR_DEFAULT = "#333333"; // Black/Grey
 
@@ -220,7 +219,7 @@
 
         // --- AUDIO ---
         const skipSound = new Audio('skip.mp3');
-        skipSound.preload = 'auto'; // Optimize for mobile
+        skipSound.preload = 'auto';
 
         // --- DOM ELEMENTS ---
         const ui = {
@@ -284,20 +283,25 @@
         }
 
         function updateGameState() {
-            // 1. Initialize on first click
+            // 1. Button Logic (Happens instantly)
             if (!gameStarted) {
                 gameStarted = true;
                 ui.btnSkip.style.display = "block";
                 ui.btnShuffle.innerText = "SHUFFLE";
-                ui.text.classList.remove("intro-text");
             }
 
             // 2. Transition Animation (Fade Out)
             ui.text.classList.add('fade-out');
 
-            // 3. Wait for fade out (300ms), then change text and Fade In
+            // 3. Wait for fade out to finish (300ms)
             setTimeout(() => {
+                // Remove intro styling now that text is invisible
+                ui.text.classList.remove("intro-text");
+
+                // Select new content
                 selectContent();
+
+                // Fade back in
                 ui.text.classList.remove('fade-out');
                 updateProgress();
             }, 300);
@@ -316,7 +320,7 @@
             } else if (finalStageQuestions.length > 0) {
                 // Final Ordered Phase
                 ui.text.innerText = finalStageQuestions[0];
-                ui.text.style.color = COLOR_FINAL; // Green
+                ui.text.style.color = COLOR_FINAL;
 
                 finalStageQuestions.shift();
                 askedCount++;
@@ -334,7 +338,6 @@
             ui.btnShuffle.innerText = "Play Again";
             ui.btnShuffle.onclick = () => location.reload();
 
-            // Force progress bar to full
             ui.bar.style.width = "100%";
             ui.progressLabel.innerText = `${totalQuestionsCount} / ${totalQuestionsCount}`;
         }
