@@ -19,6 +19,11 @@
   const endGcodeEl = document.getElementById('endGcode');
   const backToStart = document.getElementById('backToStart');
   const exportStatus = document.getElementById('exportStatus');
+  const drawCanvas = document.getElementById('drawCanvas');
+  const btnModeCamera = document.getElementById('btnModeCamera');
+  const btnModeFinger = document.getElementById('btnModeFinger');
+  const btnDrawClear = document.getElementById('btnDrawClear');
+  const btnUseProfile = document.getElementById('btnUseProfile');
 
   let stream = null;
   let capturedImageData = null;
@@ -28,7 +33,13 @@
   let contourPoints = [];
   let selectionMask = null; // Uint8Array, 1 = selected (processed size)
   let selectionMode = 'select'; // 'select' | 'add' | 'subtract'
-  const STEPS = ['step-capture', 'step-outline', 'step-specs'];
+  let sourceMode = 'camera'; // 'camera' | 'finger'
+  let profilePoints = []; // [x_mm, z_mm] closed polygon when sourceMode === 'finger'
+  let profileVaseHeight = 60;
+  let drawingPoints = []; // raw canvas coords for current stroke
+  let drawingStrokes = []; // array of strokes (each stroke = array of [x,y])
+  const STEPS = ['step-choice', 'step-capture', 'step-outline', 'step-draw', 'step-specs'];
+  let currentStep = 'step-choice';
   const PROCESS_MAX_PX = 400;
 
   function log(msg) {
@@ -39,9 +50,253 @@
   }
 
   function showStep(stepId) {
+    currentStep = stepId;
     STEPS.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = id === stepId ? 'block' : 'none';
+    });
+  }
+
+  if (btnModeCamera) {
+    btnModeCamera.addEventListener('click', function () {
+      sourceMode = 'camera';
+      showStep('step-capture');
+    });
+  }
+  if (btnModeFinger) {
+    btnModeFinger.addEventListener('click', function () {
+      sourceMode = 'finger';
+      drawingStrokes = [];
+      drawingPoints = [];
+      showStep('step-draw');
+      setTimeout(function () { initDrawCanvas(); }, 50);
+    });
+  }
+
+  // ——— Drawing canvas (finger flow): left = draw, right = live mirror; to-scale (diameter : height) ———
+  const DRAW_TOTAL_WIDTH = 640;
+  const DRAW_HEIGHT_MIN = 200;
+  const DRAW_HEIGHT_MAX = 560;
+
+  function getDrawCanvasRect() {
+    if (!drawCanvas) return null;
+    const r = drawCanvas.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    const scaleX = drawCanvas.width / r.width;
+    const scaleY = drawCanvas.height / r.height;
+    return { left: r.left, top: r.top, width: r.width, height: r.height, scaleX, scaleY };
+  }
+
+  function drawCanvasCoords(e) {
+    const rect = getDrawCanvasRect();
+    if (!rect) return null;
+    const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
+    let x = (clientX - rect.left) * rect.scaleX;
+    let y = (clientY - rect.top) * rect.scaleY;
+    const halfW = drawCanvas.width / 2;
+    x = Math.max(0, Math.min(halfW, x));
+    y = Math.max(0, Math.min(drawCanvas.height, y));
+    return [x, y];
+  }
+
+  function redrawProfileCanvas() {
+    if (!drawCanvas) return;
+    const ctx = drawCanvas.getContext('2d');
+    const w = drawCanvas.width;
+    const h = drawCanvas.height;
+    const halfW = w / 2;
+    ctx.fillStyle = '#252a2e';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, halfW, h);
+    ctx.strokeRect(halfW, 0, halfW, h);
+    ctx.beginPath();
+    ctx.moveTo(halfW, 0);
+    ctx.lineTo(halfW, h);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(107, 155, 209, 0.7)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    drawingStrokes.forEach(function (stroke) {
+      if (stroke.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0][0], stroke[0][1]);
+      for (let i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i][0], stroke[i][1]);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(107, 155, 209, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(w - stroke[0][0], stroke[0][1]);
+      for (let i = 1; i < stroke.length; i++) ctx.lineTo(w - stroke[i][0], stroke[i][1]);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(107, 155, 209, 0.7)';
+    });
+  }
+
+  let lastDrawVaseH = 60;
+  let lastDrawHeight = 0;
+
+  function getDrawCanvasSizeFromSpec() {
+    const vaseH = parseFloat(document.getElementById('drawVaseHeight').value) || 60;
+    const maxDiam = parseFloat(document.getElementById('drawMaxDiameter').value) || 80;
+    if (maxDiam <= 0) return { w: DRAW_TOTAL_WIDTH, h: 280, vaseH: 60 };
+    const h = Math.round(DRAW_TOTAL_WIDTH * vaseH / maxDiam);
+    const clampedH = Math.max(DRAW_HEIGHT_MIN, Math.min(DRAW_HEIGHT_MAX, h));
+    return { w: DRAW_TOTAL_WIDTH, h: clampedH, vaseH };
+  }
+
+  function scaleStrokesToNewHeight(oldH, oldVaseH, newH, newVaseH) {
+    if (oldH <= 0 || newVaseH <= 0) return;
+    drawingStrokes.forEach(function (stroke) {
+      stroke.forEach(function (p) {
+        const zMm = (1 - p[1] / oldH) * oldVaseH;
+        p[1] = newH * (1 - zMm / newVaseH);
+      });
+    });
+  }
+
+  function initDrawCanvas() {
+    if (!drawCanvas) return;
+    const size = getDrawCanvasSizeFromSpec();
+    const oldH = drawCanvas.height;
+    const oldVaseH = lastDrawVaseH;
+    drawCanvas.width = size.w;
+    drawCanvas.height = size.h;
+    if (oldH > 0 && drawingStrokes.length > 0) {
+      scaleStrokesToNewHeight(oldH, oldVaseH, size.h, size.vaseH);
+    }
+    lastDrawVaseH = size.vaseH;
+    lastDrawHeight = size.h;
+    redrawProfileCanvas();
+  }
+
+  function onDrawPointerDown(e) {
+    e.preventDefault();
+    if (drawingPoints.length > 0) return;
+    const pt = drawCanvasCoords(e);
+    if (!pt) return;
+    drawingPoints = [pt];
+    drawingStrokes.push(drawingPoints);
+    if (e.pointerId != null && drawCanvas.setPointerCapture) drawCanvas.setPointerCapture(e.pointerId);
+  }
+
+  function onDrawPointerMove(e) {
+    e.preventDefault();
+    if (drawingPoints.length === 0) return;
+    const pt = drawCanvasCoords(e);
+    if (!pt) return;
+    const last = drawingPoints[drawingPoints.length - 1];
+    if (Math.hypot(pt[0] - last[0], pt[1] - last[1]) < 1) return;
+    drawingPoints.push(pt);
+    redrawProfileCanvas();
+  }
+
+  function onDrawPointerUp(e) {
+    e.preventDefault();
+    if (drawCanvas.releasePointerCapture) try { drawCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    drawingPoints = [];
+  }
+
+  function initDrawCanvasListeners() {
+    if (!drawCanvas) return;
+    drawCanvas.addEventListener('pointerdown', onDrawPointerDown, { passive: false });
+    drawCanvas.addEventListener('pointermove', onDrawPointerMove, { passive: false });
+    drawCanvas.addEventListener('pointerup', onDrawPointerUp, { passive: false });
+    drawCanvas.addEventListener('pointercancel', onDrawPointerUp, { passive: false });
+    drawCanvas.addEventListener('touchstart', onDrawPointerDown, { passive: false });
+    drawCanvas.addEventListener('touchmove', onDrawPointerMove, { passive: false });
+    drawCanvas.addEventListener('touchend', onDrawPointerUp, { passive: false });
+    drawCanvas.addEventListener('touchcancel', onDrawPointerUp, { passive: false });
+    ['drawVaseHeight', 'drawMaxDiameter'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', function () {
+        if (currentStep === 'step-draw' && drawCanvas.width > 0) initDrawCanvas();
+      });
+    });
+  }
+
+  function buildProfileFromDrawing() {
+    const vaseH = parseFloat(document.getElementById('drawVaseHeight').value) || 60;
+    const maxDiam = parseFloat(document.getElementById('drawMaxDiameter').value) || 80;
+    const maxR = Math.max(0.1, maxDiam / 2);
+    if (!drawCanvas || drawingStrokes.length === 0) return null;
+    const halfW = drawCanvas.width / 2;
+    const h = drawCanvas.height;
+    if (halfW <= 0 || h <= 0) return null;
+
+    const path = [];
+    drawingStrokes.forEach(function (stroke) {
+      stroke.forEach(function (p) {
+        let radiusMm = (p[0] / halfW) * maxR;
+        let zMm = (1 - p[1] / h) * vaseH;
+        radiusMm = Math.max(0, Math.min(maxR, radiusMm));
+        zMm = Math.max(0, Math.min(vaseH, zMm));
+        path.push([radiusMm, zMm]);
+      });
+    });
+    if (path.length < 2) return null;
+
+    let minR = path[0][0], maxRDrawn = path[0][0], minZ = path[0][1], maxZDrawn = path[0][1];
+    path.forEach(function (pt) {
+      minR = Math.min(minR, pt[0]);
+      maxRDrawn = Math.max(maxRDrawn, pt[0]);
+      minZ = Math.min(minZ, pt[1]);
+      maxZDrawn = Math.max(maxZDrawn, pt[1]);
+    });
+    const rangeR = maxRDrawn - minR;
+    const rangeZ = maxZDrawn - minZ;
+    if (rangeR > 1e-6 && rangeZ > 1e-6) {
+      path.forEach(function (pt) {
+        pt[0] = ((pt[0] - minR) / rangeR) * maxR;
+        pt[1] = ((pt[1] - minZ) / rangeZ) * vaseH;
+        pt[0] = Math.max(0, Math.min(maxR, pt[0]));
+        pt[1] = Math.max(0, Math.min(vaseH, pt[1]));
+      });
+    }
+
+    const numSamples = Math.max(20, Math.ceil(vaseH / 2));
+    const step = vaseH / (numSamples - 1);
+    const envelope = [];
+    for (let i = 0; i < numSamples; i++) {
+      let z = i * step;
+      if (i === numSamples - 1) z = vaseH;
+      let rMax = 0;
+      const band = step * 0.6;
+      path.forEach(function (pt) {
+        if (Math.abs(pt[1] - z) <= band) rMax = Math.max(rMax, pt[0]);
+      });
+      envelope.push([rMax, z]);
+    }
+    const closed = [[0, 0]].concat(envelope, [[0, vaseH]], [[0, 0]]);
+    return { points: closed, vaseHeight: vaseH };
+  }
+
+  if (btnDrawClear) {
+    btnDrawClear.addEventListener('click', function () {
+      drawingStrokes = [];
+      drawingPoints = [];
+      redrawProfileCanvas();
+    });
+  }
+  if (btnUseProfile) {
+    btnUseProfile.addEventListener('click', function () {
+      const built = buildProfileFromDrawing();
+      const drawStatus = document.getElementById('drawStatus');
+      if (!built || built.points.length < 3) {
+        if (drawStatus) {
+          drawStatus.textContent = 'Draw a profile first (at least a short stroke).';
+          drawStatus.style.display = 'block';
+        }
+        return;
+      }
+      if (drawStatus) drawStatus.style.display = 'none';
+      profilePoints = built.points;
+      profileVaseHeight = built.vaseHeight;
+      const vaseHeightEl = document.getElementById('vaseHeight');
+      if (vaseHeightEl) vaseHeightEl.value = profileVaseHeight;
+      showStep('step-specs');
     });
   }
 
@@ -503,17 +758,31 @@
     el.textContent = 'First: ' + first.toFixed(1) + ' mm/s · Other: ' + other.toFixed(1) + ' mm/s';
   }
 
+  function getProfilePointsForRevolve() {
+    if (sourceMode === 'finger') {
+      if (profilePoints.length < 3) return null;
+      return { pts: profilePoints, vaseHeight: profileVaseHeight, halfProfile: true };
+    }
+    if (contourPoints.length < 3) return null;
+    const s = getSpecs();
+    const pts = normalizeContourUpright(contourPoints, s.vaseHeight);
+    if (pts.length < 3) return null;
+    return { pts, vaseHeight: s.vaseHeight, halfProfile: false };
+  }
+
   // Build revolved mesh data (layer rings) for preview and G-code. Returns null if no contour.
   function getRevolvedMeshData() {
-    if (contourPoints.length < 3) return null;
+    const data = getProfilePointsForRevolve();
+    if (!data) return null;
+    const pts = data.pts;
+    const vaseH = data.vaseHeight;
+    const halfProfile = data.halfProfile;
     const s = getSpecs();
     const offsetX = s.bedSizeX / 2;
     const offsetY = s.bedSizeY / 2;
-    const pts = normalizeContourUpright(contourPoints, s.vaseHeight);
-    if (pts.length < 3) return null;
     const layerHeight = s.layerHeight;
     const firstLayerHeight = s.firstLayerHeight;
-    const numLayers = s.vaseHeight <= firstLayerHeight ? 1 : 1 + Math.floor((s.vaseHeight - firstLayerHeight) / layerHeight);
+    const numLayers = vaseH <= firstLayerHeight ? 1 : 1 + Math.floor((vaseH - firstLayerHeight) / layerHeight);
     const minRadius = s.lineWidth * 0.5;
     const segsPerCircle = 64;
     const layers = [];
@@ -521,11 +790,11 @@
       const isFirstLayer = L === 0;
       const layerThickness = isFirstLayer ? firstLayerHeight : layerHeight;
       const zStart = isFirstLayer ? 0 : firstLayerHeight + (L - 1) * layerHeight;
-      if (zStart >= s.vaseHeight) break;
+      if (zStart >= vaseH) break;
       const zMid = zStart + layerThickness * 0.5;
       const slice = slicePolygonAtZ(pts, zMid);
       if (!slice) continue;
-      let r = (slice[1] - slice[0]) * 0.5;
+      let r = halfProfile ? (slice[1] - slice[0]) : (slice[1] - slice[0]) * 0.5;
       if (r < minRadius) r = minRadius;
       const ring = [];
       for (let i = 0; i <= segsPerCircle; i++) {
@@ -538,31 +807,32 @@
       }
       layers.push(ring);
     }
-    return { layers, offsetX, offsetY, vaseHeight: s.vaseHeight };
+    return { layers, offsetX, offsetY, vaseHeight: vaseH };
   }
 
   function generateGcode() {
-    if (contourPoints.length < 3) {
-      log('No outline. Go back and capture + detect outline first.');
+    const data = getProfilePointsForRevolve();
+    if (!data) {
+      log(sourceMode === 'finger' ? 'Draw a profile first, then use it.' : 'No outline. Go back and capture + detect outline first.');
       return null;
     }
+    const pts = data.pts;
+    const vaseH = data.vaseHeight;
+    const halfProfile = data.halfProfile;
     const s = getSpecs();
     const offsetX = s.bedSizeX / 2;
     const offsetY = s.bedSizeY / 2;
-    // Normalize so silhouette stands upright: image vertical -> Z (base at 0, top at vase_height)
-    const pts = normalizeContourUpright(contourPoints, s.vaseHeight);
-    if (pts.length < 3) return null;
 
     const layerHeight = s.layerHeight;
     const firstLayerHeight = s.firstLayerHeight;
-    const numLayers = s.vaseHeight <= firstLayerHeight ? 1 : 1 + Math.floor((s.vaseHeight - firstLayerHeight) / layerHeight);
+    const numLayers = vaseH <= firstLayerHeight ? 1 : 1 + Math.floor((vaseH - firstLayerHeight) / layerHeight);
     const minRadius = s.lineWidth * 0.5;
 
     const lines = [];
     lines.push('; Photo to Vase — revolved vase, spiral (continuous Z), optimized for 3D print');
     lines.push('; Centered on bed (X' + offsetX + ' Y' + offsetY + ' mm)');
     lines.push('; First layer height: ' + firstLayerHeight + ' mm, Layer height: ' + layerHeight + ' mm');
-    lines.push('; Z height: ' + s.vaseHeight + ' mm, Bottom layers: ' + s.bottomLayers);
+    lines.push('; Z height: ' + vaseH + ' mm, Bottom layers: ' + s.bottomLayers);
     lines.push('; Max volumetric: ' + s.maxVolumetricSpeed + ' mm³/s → speed derived per layer');
     lines.push('');
     lines.push(s.startGcode);
@@ -579,13 +849,13 @@
       const layerThickness = isFirstLayer ? firstLayerHeight : layerHeight;
       const zStart = isFirstLayer ? 0 : firstLayerHeight + (L - 1) * layerHeight;
       const zEnd = zStart + layerThickness;
-      if (zStart >= s.vaseHeight) break;
+      if (zStart >= vaseH) break;
       const zMid = (zStart + zEnd) * 0.5;
       const slice = slicePolygonAtZ(pts, zMid);
       if (!slice) continue;
       const xMin = slice[0];
       const xMax = slice[1];
-      let r = (xMax - xMin) * 0.5;
+      let r = halfProfile ? (xMax - xMin) : (xMax - xMin) * 0.5;
       if (r < minRadius) r = minRadius;
       const extrusionPerMm = (s.lineWidth * layerThickness) / (Math.PI * Math.pow(s.filamentDiam / 2, 2));
       const speedMmS = speedFromVolumetric(s.maxVolumetricSpeed, s.lineWidth, layerThickness);
@@ -593,20 +863,26 @@
       const isBottomLayer = L < s.bottomLayers;
 
       if (isBottomLayer) {
-        lines.push('; Layer ' + (L + 1) + ' Z' + zStart.toFixed(3) + ' bottom (solid floor) R' + r.toFixed(3));
-        let rRing = r;
-        while (rRing >= minRadius) {
-          const circum = 2 * Math.PI * rRing;
-          const segs = Math.max(16, Math.min(128, Math.ceil(circum / s.lineWidth)));
-          const segLen = circum / segs;
-          for (let i = 0; i <= segs; i++) {
-            const theta = (i / segs) * 2 * Math.PI;
-            const x = offsetX + rRing * Math.cos(theta);
-            const y = offsetY + rRing * Math.sin(theta);
-            e += segLen * extrusionPerMm;
-            lines.push('G1 X' + x.toFixed(3) + ' Y' + y.toFixed(3) + ' Z' + zStart.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+        lines.push('; Layer ' + (L + 1) + ' Z' + zStart.toFixed(3) + ' bottom (solid floor, horizontal lines) R' + r.toFixed(3));
+        let yRel = -r;
+        let lineIndex = 0;
+        while (yRel <= r) {
+          let xHalf = r * r - yRel * yRel;
+          xHalf = xHalf > 0 ? Math.sqrt(xHalf) : 0;
+          if (xHalf >= 0.001) {
+            let xStart = offsetX - xHalf;
+            let xEnd = offsetX + xHalf;
+            const yCur = offsetY + yRel;
+            const lineLen = 2 * xHalf;
+            if (lineIndex % 2 === 1) {
+              const t = xStart; xStart = xEnd; xEnd = t;
+            }
+            lines.push('G1 X' + xStart.toFixed(3) + ' Y' + yCur.toFixed(3) + ' Z' + zStart.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+            e += lineLen * extrusionPerMm;
+            lines.push('G1 X' + xEnd.toFixed(3) + ' Y' + yCur.toFixed(3) + ' Z' + zStart.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+            lineIndex++;
           }
-          rRing -= s.lineWidth;
+          yRel += s.lineWidth;
         }
       } else {
         const circumference = 2 * Math.PI * r;
@@ -879,7 +1155,10 @@
   if (backToStart) {
     backToStart.addEventListener('click', function (e) {
       e.preventDefault();
-      showStep('step-capture');
+      if (currentStep === 'step-capture' || currentStep === 'step-draw') showStep('step-choice');
+      else if (currentStep === 'step-outline') showStep('step-capture');
+      else if (currentStep === 'step-specs') showStep(sourceMode === 'camera' ? 'step-outline' : 'step-draw');
+      else if (currentStep === 'step-choice') showStep('step-choice');
     });
   }
 
@@ -891,6 +1170,7 @@
       if (el) el.addEventListener('input', updateDerivedSpeedDisplay);
     });
     initPreview();
+    initDrawCanvasListeners();
   }
 
   if (document.readyState === 'loading') {
