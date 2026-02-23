@@ -22,10 +22,14 @@
 
   let stream = null;
   let capturedImageData = null;
+  let processedImageData = null; // downscaled for fast flood fill (max 400px)
+  let processedW = 0;
+  let processedH = 0;
   let contourPoints = [];
-  let selectionMask = null; // Uint8Array, 1 = selected
+  let selectionMask = null; // Uint8Array, 1 = selected (processed size)
   let selectionMode = 'select'; // 'select' | 'add' | 'subtract'
   const STEPS = ['step-capture', 'step-outline', 'step-specs'];
+  const PROCESS_MAX_PX = 400;
 
   function log(msg) {
     if (exportStatus) {
@@ -70,6 +74,9 @@
     const ctx = captureCanvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
     capturedImageData = ctx.getImageData(0, 0, w, h);
+    processedImageData = createDownscaledImageData(capturedImageData, PROCESS_MAX_PX);
+    processedW = processedImageData.width;
+    processedH = processedImageData.height;
     outlineCanvas.width = w;
     outlineCanvas.height = h;
     showStep('step-outline');
@@ -88,6 +95,9 @@
       const ctx = captureCanvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
       capturedImageData = ctx.getImageData(0, 0, w, h);
+      processedImageData = createDownscaledImageData(capturedImageData, PROCESS_MAX_PX);
+      processedW = processedImageData.width;
+      processedH = processedImageData.height;
       outlineCanvas.width = w;
       outlineCanvas.height = h;
       showStep('step-outline');
@@ -96,6 +106,28 @@
     img.src = URL.createObjectURL(file);
     e.target.value = '';
   });
+
+  function createDownscaledImageData(sourceImageData, maxDim) {
+    const sw = sourceImageData.width;
+    const sh = sourceImageData.height;
+    const scale = maxDim / Math.max(sw, sh);
+    if (scale >= 1) return sourceImageData;
+    const w = Math.max(1, Math.round(sw * scale));
+    const h = Math.max(1, Math.round(sh * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(sw, sh);
+    imgData.data.set(sourceImageData.data);
+    ctx.putImageData(imgData, 0, 0);
+    const small = document.createElement('canvas');
+    small.width = w;
+    small.height = h;
+    const smallCtx = small.getContext('2d');
+    smallCtx.drawImage(canvas, 0, 0, sw, sh, 0, 0, w, h);
+    return smallCtx.getImageData(0, 0, w, h);
+  }
 
   // ——— Grayscale ———
   function toGrayscale(data) {
@@ -316,25 +348,29 @@
   }
 
   function onOutlineCanvasClick(e) {
-    if (!capturedImageData) return;
-    const [px, py] = canvasToImageCoords(e);
+    if (!capturedImageData || !processedImageData) return;
     const w = capturedImageData.width;
     const h = capturedImageData.height;
+    const [px, py] = canvasToImageCoords(e);
     if (px < 0 || px >= w || py < 0 || py >= h) return;
+    const sx = Math.min(processedW - 1, Math.max(0, Math.round(px * processedW / w)));
+    const sy = Math.min(processedH - 1, Math.max(0, Math.round(py * processedH / h)));
     const tolerance = parseInt(toleranceInput.value, 10) || 32;
-    const filled = floodFillAt(capturedImageData, w, h, px, py, tolerance);
+    const filled = floodFillAt(processedImageData, processedW, processedH, sx, sy, tolerance);
     if (!selectionMask) {
-      selectionMask = filled;
+      selectionMask = new Uint8Array(processedW * processedH);
+      selectionMask.set(filled);
       selectionMode = 'select';
     } else if (selectionMode === 'add') {
-      for (let i = 0; i < w * h; i++) selectionMask[i] = selectionMask[i] || filled[i];
+      for (let i = 0; i < processedW * processedH; i++) selectionMask[i] = selectionMask[i] || filled[i];
     } else if (selectionMode === 'subtract') {
-      for (let i = 0; i < w * h; i++) if (filled[i]) selectionMask[i] = 0;
+      for (let i = 0; i < processedW * processedH; i++) if (filled[i]) selectionMask[i] = 0;
     }
-    contourPoints = getLargestContour(selectionMask, w, h);
-    if (contourPoints.length > 10) {
-      contourPoints = simplifyPoints(contourPoints, 2);
-    }
+    let contour = getLargestContour(selectionMask, processedW, processedH);
+    if (contour.length > 10) contour = simplifyPoints(contour, 2);
+    contourPoints = contour.map(function (p) {
+      return [p[0] * w / processedW, p[1] * h / processedH];
+    });
     drawOutlineCanvas();
     updateOutlinePreview();
   }
@@ -353,27 +389,17 @@
     const w = outlineCanvas.width;
     const h = outlineCanvas.height;
     ctx.drawImage(captureCanvas, 0, 0);
-    if (selectionMask) {
-      const overlay = ctx.getImageData(0, 0, w, h);
-      for (let i = 0; i < selectionMask.length; i++) {
-        if (selectionMask[i]) {
-          overlay.data[i * 4 + 3] = 120;
-          overlay.data[i * 4] = 107;
-          overlay.data[i * 4 + 1] = 155;
-          overlay.data[i * 4 + 2] = 209;
-        }
-      }
-      ctx.putImageData(overlay, 0, 0);
-    }
-    if (contourPoints.length >= 2) {
-      ctx.strokeStyle = '#e07a7a';
-      ctx.lineWidth = 2;
+    if (contourPoints.length >= 3) {
       ctx.beginPath();
       ctx.moveTo(contourPoints[0][0], contourPoints[0][1]);
       for (let i = 1; i < contourPoints.length; i++) {
         ctx.lineTo(contourPoints[i][0], contourPoints[i][1]);
       }
       ctx.closePath();
+      ctx.fillStyle = 'rgba(107, 155, 209, 0.35)';
+      ctx.fill();
+      ctx.strokeStyle = '#e07a7a';
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
   }
@@ -447,13 +473,14 @@
     const bedSizeY = num('bedSizeY', 220);
     const bedTemp = int('bedTemp', 60);
     const hotendTemp = int('hotendTemp', 225);
+    const partCoolingFan = Math.min(100, Math.max(0, int('partCoolingFan', 100)));
     const bottomLayers = Math.max(1, int('bottomLayers', 1));
     const startGcode = (startGcodeEl && startGcodeEl.value.trim()) ? startGcodeEl.value.trim() : DEFAULT_START_GCODE;
     const endGcode = (endGcodeEl && endGcodeEl.value.trim()) ? endGcodeEl.value.trim() : DEFAULT_END_GCODE;
     return {
       nozzleSize, filamentDiam, filamentDensity, layerHeight, firstLayerHeight,
       lineWidth, maxVolumetricSpeed, vaseHeight, maxSizeMm,
-      bedSizeX, bedSizeY, bedTemp, hotendTemp, bottomLayers, startGcode, endGcode
+      bedSizeX, bedSizeY, bedTemp, hotendTemp, partCoolingFan, bottomLayers, startGcode, endGcode
     };
   }
 
@@ -474,6 +501,44 @@
     const first = speedFromVolumetric(vol, lw, flh);
     const other = speedFromVolumetric(vol, lw, lh);
     el.textContent = 'First: ' + first.toFixed(1) + ' mm/s · Other: ' + other.toFixed(1) + ' mm/s';
+  }
+
+  // Build revolved mesh data (layer rings) for preview and G-code. Returns null if no contour.
+  function getRevolvedMeshData() {
+    if (contourPoints.length < 3) return null;
+    const s = getSpecs();
+    const offsetX = s.bedSizeX / 2;
+    const offsetY = s.bedSizeY / 2;
+    const pts = normalizeContourUpright(contourPoints, s.vaseHeight);
+    if (pts.length < 3) return null;
+    const layerHeight = s.layerHeight;
+    const firstLayerHeight = s.firstLayerHeight;
+    const numLayers = s.vaseHeight <= firstLayerHeight ? 1 : 1 + Math.floor((s.vaseHeight - firstLayerHeight) / layerHeight);
+    const minRadius = s.lineWidth * 0.5;
+    const segsPerCircle = 64;
+    const layers = [];
+    for (let L = 0; L < numLayers; L++) {
+      const isFirstLayer = L === 0;
+      const layerThickness = isFirstLayer ? firstLayerHeight : layerHeight;
+      const zStart = isFirstLayer ? 0 : firstLayerHeight + (L - 1) * layerHeight;
+      if (zStart >= s.vaseHeight) break;
+      const zMid = zStart + layerThickness * 0.5;
+      const slice = slicePolygonAtZ(pts, zMid);
+      if (!slice) continue;
+      let r = (slice[1] - slice[0]) * 0.5;
+      if (r < minRadius) r = minRadius;
+      const ring = [];
+      for (let i = 0; i <= segsPerCircle; i++) {
+        const theta = (i / segsPerCircle) * 2 * Math.PI;
+        ring.push({
+          x: offsetX + r * Math.cos(theta),
+          y: offsetY + r * Math.sin(theta),
+          z: zStart
+        });
+      }
+      layers.push(ring);
+    }
+    return { layers, offsetX, offsetY, vaseHeight: s.vaseHeight };
   }
 
   function generateGcode() {
@@ -505,6 +570,8 @@
     lines.push('; ----- revolved vase: spiral path, no retraction, absolute E -----');
     lines.push('M82 ; absolute extrusion');
     lines.push('G92 E0');
+    const fanPwm = Math.round((s.partCoolingFan / 100) * 255);
+    lines.push('M106 S' + fanPwm + ' ; part cooling fan ' + s.partCoolingFan + '%');
 
     let e = 0;
     for (let L = 0; L < numLayers; L++) {
@@ -520,27 +587,275 @@
       const xMax = slice[1];
       let r = (xMax - xMin) * 0.5;
       if (r < minRadius) r = minRadius;
-      const circumference = 2 * Math.PI * r;
-      const segsPerCircle = Math.max(32, Math.min(128, Math.ceil(circumference / s.lineWidth)));
-      const segLen = circumference / segsPerCircle;
       const extrusionPerMm = (s.lineWidth * layerThickness) / (Math.PI * Math.pow(s.filamentDiam / 2, 2));
       const speedMmS = speedFromVolumetric(s.maxVolumetricSpeed, s.lineWidth, layerThickness);
       const feedrate = Math.round(speedMmS * 60);
-      lines.push('; Layer ' + (L + 1) + ' Z' + zStart.toFixed(3) + '-' + zEnd.toFixed(3) + ' R' + r.toFixed(3) + (isFirstLayer ? ' (first layer)' : ''));
-      for (let i = 0; i <= segsPerCircle; i++) {
-        const t = i / segsPerCircle;
-        const theta = t * 2 * Math.PI;
-        const z = zStart + t * layerThickness;
-        const x = offsetX + r * Math.cos(theta);
-        const y = offsetY + r * Math.sin(theta);
-        e += segLen * extrusionPerMm;
-        lines.push('G1 X' + x.toFixed(3) + ' Y' + y.toFixed(3) + ' Z' + z.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+      const isBottomLayer = L < s.bottomLayers;
+
+      if (isBottomLayer) {
+        lines.push('; Layer ' + (L + 1) + ' Z' + zStart.toFixed(3) + ' bottom (solid floor) R' + r.toFixed(3));
+        let rRing = r;
+        while (rRing >= minRadius) {
+          const circum = 2 * Math.PI * rRing;
+          const segs = Math.max(16, Math.min(128, Math.ceil(circum / s.lineWidth)));
+          const segLen = circum / segs;
+          for (let i = 0; i <= segs; i++) {
+            const theta = (i / segs) * 2 * Math.PI;
+            const x = offsetX + rRing * Math.cos(theta);
+            const y = offsetY + rRing * Math.sin(theta);
+            e += segLen * extrusionPerMm;
+            lines.push('G1 X' + x.toFixed(3) + ' Y' + y.toFixed(3) + ' Z' + zStart.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+          }
+          rRing -= s.lineWidth;
+        }
+      } else {
+        const circumference = 2 * Math.PI * r;
+        const segsPerCircle = Math.max(32, Math.min(128, Math.ceil(circumference / s.lineWidth)));
+        const segLen = circumference / segsPerCircle;
+        lines.push('; Layer ' + (L + 1) + ' Z' + zStart.toFixed(3) + '-' + zEnd.toFixed(3) + ' R' + r.toFixed(3) + ' vase');
+        for (let i = 0; i <= segsPerCircle; i++) {
+          const t = i / segsPerCircle;
+          const theta = t * 2 * Math.PI;
+          const z = zStart + t * layerThickness;
+          const x = offsetX + r * Math.cos(theta);
+          const y = offsetY + r * Math.sin(theta);
+          e += segLen * extrusionPerMm;
+          lines.push('G1 X' + x.toFixed(3) + ' Y' + y.toFixed(3) + ' Z' + z.toFixed(3) + ' E' + e.toFixed(5) + ' F' + feedrate);
+        }
       }
       lines.push('');
     }
 
     lines.push(s.endGcode);
     return lines.join('\n');
+  }
+
+  // ——— 3D preview (slicer-style: orbit, zoom, bed) ———
+  let previewScene = null;
+  let previewCamera = null;
+  let previewRenderer = null;
+  let previewMesh = null;
+  let previewBed = null;
+  let previewAnimationId = null;
+  let previewOrbit = { radius: 120, theta: 0.6, phi: 0.5 };
+  let previewTarget = null;
+  let previewPointer = { down: false, lastX: 0, lastY: 0 };
+
+  function buildPreviewMesh() {
+    const data = getRevolvedMeshData();
+    const wrap = document.getElementById('previewWrap');
+    const placeholder = document.getElementById('previewPlaceholder');
+    if (!wrap || !placeholder) return;
+    if (!data || !data.layers.length) {
+      if (previewMesh && previewScene) {
+        previewScene.remove(previewMesh);
+        previewMesh.geometry.dispose();
+        previewMesh.material.dispose();
+        previewMesh = null;
+      }
+      if (previewBed && previewScene) {
+        previewScene.remove(previewBed);
+        previewBed.geometry.dispose();
+        previewBed.material.dispose();
+        previewBed = null;
+      }
+      wrap.classList.remove('has-preview');
+      placeholder.textContent = 'Select an outline in step 2 first.';
+      return;
+    }
+    const layers = data.layers;
+    const segs = layers[0].length - 1;
+    const numLayers = layers.length;
+    const positions = [];
+    const indices = [];
+    const cx = data.offsetX;
+    const cy = data.offsetY;
+    for (let L = 0; L < numLayers; L++) {
+      for (let i = 0; i <= segs; i++) {
+        const p = layers[L][i];
+        positions.push(p.x - cx, p.z, p.y - cy);
+      }
+    }
+    for (let L = 0; L < numLayers - 1; L++) {
+      for (let i = 0; i < segs; i++) {
+        const a = L * (segs + 1) + i;
+        const b = L * (segs + 1) + i + 1;
+        const c = (L + 1) * (segs + 1) + i + 1;
+        const d = (L + 1) * (segs + 1) + i;
+        indices.push(a, b, c, a, c, d);
+      }
+    }
+    if (typeof THREE === 'undefined') return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const material = new THREE.MeshPhongMaterial({
+      color: 0x6b9bd1,
+      side: THREE.DoubleSide,
+      shininess: 30
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    if (previewMesh && previewScene) {
+      previewScene.remove(previewMesh);
+      previewMesh.geometry.dispose();
+      previewMesh.material.dispose();
+    }
+    if (previewBed && previewScene) {
+      previewScene.remove(previewBed);
+      previewBed.geometry.dispose();
+      previewBed.material.dispose();
+      previewBed = null;
+    }
+    if (!previewScene) {
+      const canvas = document.getElementById('previewCanvas');
+      if (!canvas) return;
+      previewTarget = new THREE.Vector3(0, 0, 0);
+      previewScene = new THREE.Scene();
+      previewScene.background = new THREE.Color(0x1e2226);
+      previewCamera = new THREE.PerspectiveCamera(50, 1, 1, 1000);
+      previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      const light1 = new THREE.DirectionalLight(0xffffff, 0.85);
+      light1.position.set(40, 80, 40);
+      previewScene.add(light1);
+      previewScene.add(new THREE.AmbientLight(0xffffff, 0.35));
+      initPreviewOrbit(canvas);
+    }
+    const h = data.vaseHeight;
+    const s = getSpecs();
+    const bedW = s.bedSizeX;
+    const bedD = s.bedSizeY;
+    const bedGeom = new THREE.PlaneGeometry(bedW, bedD);
+    bedGeom.rotateX(-Math.PI / 2);
+    const bedMat = new THREE.MeshPhongMaterial({
+      color: 0x2d3238,
+      side: THREE.DoubleSide
+    });
+    previewBed = new THREE.Mesh(bedGeom, bedMat);
+    previewBed.position.set(0, 0, 0);
+    previewScene.add(previewBed);
+    previewTarget.set(0, h * 0.5, 0);
+    previewOrbit.radius = Math.max(60, Math.min(400, h * 1.8));
+    previewOrbit.theta = 0.6;
+    previewOrbit.phi = 0.5;
+    updatePreviewCamera();
+    previewScene.add(mesh);
+    previewMesh = mesh;
+    wrap.classList.add('has-preview');
+    placeholder.style.display = 'none';
+    resizePreview();
+  }
+
+  function updatePreviewCamera() {
+    if (!previewCamera || !previewTarget) return;
+    const r = previewOrbit.radius;
+    const t = previewOrbit.theta;
+    const p = previewOrbit.phi;
+    previewCamera.position.set(
+      previewTarget.x + r * Math.sin(p) * Math.cos(t),
+      previewTarget.y + r * Math.cos(p),
+      previewTarget.z + r * Math.sin(p) * Math.sin(t)
+    );
+    previewCamera.lookAt(previewTarget.x, previewTarget.y, previewTarget.z);
+    previewCamera.updateProjectionMatrix();
+  }
+
+  function initPreviewOrbit(canvas) {
+    if (!canvas) return;
+    function getClientXY(e) {
+      if (e.touches && e.touches.length) return [e.touches[0].clientX, e.touches[0].clientY];
+      return [e.clientX, e.clientY];
+    }
+    function onDown(e) {
+      previewPointer.down = true;
+      const xy = getClientXY(e);
+      previewPointer.lastX = xy[0];
+      previewPointer.lastY = xy[1];
+    }
+    function onUp() { previewPointer.down = false; }
+    function onMove(e) {
+      if (!previewPointer.down || !previewCamera) return;
+      const xy = getClientXY(e);
+      const dx = xy[0] - previewPointer.lastX;
+      const dy = xy[1] - previewPointer.lastY;
+      previewPointer.lastX = xy[0];
+      previewPointer.lastY = xy[1];
+      previewOrbit.theta -= dx * 0.005;
+      previewOrbit.phi = Math.max(0.15, Math.min(Math.PI - 0.15, previewOrbit.phi + dy * 0.005));
+      updatePreviewCamera();
+    }
+    function onWheel(e) {
+      e.preventDefault();
+      previewOrbit.radius = Math.max(30, Math.min(600, previewOrbit.radius * (e.deltaY > 0 ? 1.1 : 0.9)));
+      updatePreviewCamera();
+    }
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('touchstart', onDown, { passive: true });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchcancel', onUp);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchmove', onMove, { passive: false });
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+  }
+
+  function resizePreview() {
+    if (!previewRenderer || !previewCamera) return;
+    const wrap = document.getElementById('previewWrap');
+    const canvas = document.getElementById('previewCanvas');
+    if (!wrap || !canvas) return;
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight || 240;
+    if (w <= 0 || h <= 0) return;
+    canvas.width = w;
+    canvas.height = h;
+    previewRenderer.setSize(w, h);
+    previewCamera.aspect = w / h;
+    previewCamera.updateProjectionMatrix();
+    previewRenderer.render(previewScene, previewCamera);
+  }
+
+  function animatePreview() {
+    if (!previewRenderer || !previewScene || !previewCamera) return;
+    previewRenderer.render(previewScene, previewCamera);
+    previewAnimationId = requestAnimationFrame(animatePreview);
+  }
+
+  function startPreviewLoop() {
+    if (previewAnimationId != null) return;
+    animatePreview();
+  }
+
+  function stopPreviewLoop() {
+    if (previewAnimationId != null) {
+      cancelAnimationFrame(previewAnimationId);
+      previewAnimationId = null;
+    }
+  }
+
+  function initPreview() {
+    const group = document.getElementById('preview-group');
+    if (!group) return;
+    group.addEventListener('toggle', function () {
+      if (group.open) {
+        buildPreviewMesh();
+        startPreviewLoop();
+      } else {
+        stopPreviewLoop();
+      }
+    });
+    const resizeObs = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resizePreview) : null;
+    const wrap = document.getElementById('previewWrap');
+    if (resizeObs && wrap) resizeObs.observe(wrap);
+    window.addEventListener('resize', resizePreview);
+    const specIds = ['vaseHeight', 'layerHeight', 'firstLayerHeight', 'lineWidth'];
+    specIds.forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', function () {
+        if (group.open) buildPreviewMesh();
+      });
+    });
   }
 
   function doExport() {
@@ -575,6 +890,7 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', updateDerivedSpeedDisplay);
     });
+    initPreview();
   }
 
   if (document.readyState === 'loading') {

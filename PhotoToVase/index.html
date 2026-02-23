@@ -343,6 +343,24 @@
       font-family: ui-monospace, monospace;
       color: var(--muted);
     }
+    .preview-wrap {
+      position: relative;
+      width: 100%;
+      min-height: min(50vh, 280px);
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .preview-wrap canvas { display: block; width: 100%; height: 100%; min-height: 240px; touch-action: none; }
+    .preview-placeholder {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
+      color: var(--muted);
+    }
+    .preview-wrap.has-preview .preview-placeholder { display: none; }
   </style>
 </head>
 
@@ -484,7 +502,7 @@
       </details>
 
       <details class="settings-group">
-        <summary>Temperature</summary>
+        <summary>Temperature & cooling</summary>
         <div class="settings-group-content">
           <div class="form-grid">
             <div class="form-group">
@@ -495,7 +513,22 @@
               <label>Nozzle (first layer) (°C)</label>
               <input type="number" id="hotendTemp" value="225" min="180" max="280" title="first_layer_temperature">
             </div>
+            <div class="form-group">
+              <label>Part cooling fan (%)</label>
+              <input type="number" id="partCoolingFan" value="100" min="0" max="100" title="M106 S value: 100% = S255">
+            </div>
           </div>
+        </div>
+      </details>
+
+      <details class="settings-group" id="preview-group">
+        <summary>3D preview</summary>
+        <div class="settings-group-content">
+          <div class="preview-wrap" id="previewWrap">
+            <canvas id="previewCanvas" title="Drag to rotate, scroll to zoom"></canvas>
+            <p class="hint preview-placeholder" id="previewPlaceholder">Open this section to see the revolved shape.</p>
+          </div>
+          <p class="hint">Drag to rotate · Scroll to zoom · Same view as your print bed</p>
         </div>
       </details>
 
@@ -524,6 +557,7 @@
     <a href="../index.html">KeyQuest</a> · Photo to Vase — outline from photo to vase-mode G-code
   </footer>
 
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script src="photo-to-vase.js"></script>
 </body>
 
