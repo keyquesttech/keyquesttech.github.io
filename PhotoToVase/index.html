@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1f22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Photo to Vase — G-code from photo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="32x32" href="../favicon/page_icon.png">
+  <style>
+    :root {
+      --bg: #1b1f22;
+      --surface: #252a2e;
+      --border: #3d444c;
+      --text: #e6e6e6;
+      --muted: #9ca3af;
+      --accent: #6b9bd1;
+      --accent-hover: #5a8ac4;
+      --touch: min(2.75rem, 44px);
+      --space-xs: clamp(0.25rem, 1vw, 0.375rem);
+      --space-sm: clamp(0.5rem, 2vw, 0.75rem);
+      --space-md: clamp(0.75rem, 4vw, 1.25rem);
+      --space-lg: clamp(1rem, 5vw, 1.5rem);
+      --text-sm: clamp(0.8125rem, 2vw, 0.9rem);
+      --text-base: clamp(0.9375rem, 2.5vw, 1rem);
+      --text-lg: clamp(1rem, 3vw, 1.25rem);
+      --radius: clamp(4px, 1.5vw, 6px);
+      --radius-lg: clamp(6px, 2vw, 8px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      font-size: 100%;
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+    }
+
+    body {
+      font-family: "Quicksand", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      line-height: 1.5;
+      font-size: var(--text-base);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .page-header {
+      padding: var(--space-sm) var(--space-lg);
+      padding-left: max(var(--space-lg), env(safe-area-inset-left));
+      padding-right: max(var(--space-lg), env(safe-area-inset-right));
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .page-header a {
+      color: var(--muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      min-height: var(--touch);
+    }
+
+    .page-header a:hover, .page-header a:active { color: var(--accent); }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: var(--text-lg);
+      font-weight: 600;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: var(--space-md);
+      padding-left: max(var(--space-md), env(safe-area-inset-left));
+      padding-right: max(var(--space-md), env(safe-area-inset-right));
+      padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
+    }
+
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+
+    .step h2 {
+      margin: 0 0 var(--space-sm) 0;
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .video-wrap, .canvas-wrap {
+      position: relative;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      max-width: 100%;
+      margin-bottom: var(--space-sm);
+    }
+
+    .video-wrap video,
+    .video-wrap canvas,
+    .canvas-wrap canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: min(50vh, 400px);
+      max-height: min(50dvh, 400px);
+      object-fit: contain;
+      object-position: center;
+    }
+
+    .canvas-wrap canvas { cursor: crosshair; touch-action: none; }
+
+    button, .upload-label .button {
+      font-family: inherit;
+      font-weight: 500;
+      font-size: var(--text-base);
+      min-height: var(--touch);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    button:hover, button:active,
+    .upload-label .button:hover, .upload-label .button:active {
+      background: var(--border);
+    }
+
+    button.primary, .upload-label .button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover, button.primary:active,
+    .upload-label .button.primary:hover, .upload-label .button.primary:active {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      margin-top: var(--space-sm);
+    }
+
+    .btn-row button, .btn-row .upload-label .button {
+      flex: 1 1 auto;
+      min-width: min(100%, 8rem);
+    }
+
+    label {
+      display: block;
+      margin-bottom: var(--space-xs);
+      font-size: var(--text-sm);
+      color: var(--muted);
+    }
+
+    input, select, textarea {
+      font-family: inherit;
+      font-size: 16px;
+      font-size: max(16px, var(--text-base));
+      padding: var(--space-sm) var(--space-sm);
+      min-height: var(--touch);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      width: 100%;
+      margin-bottom: var(--space-sm);
+      -webkit-appearance: none;
+      appearance: none;
+      touch-action: manipulation;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    input[type="range"] {
+      min-height: 2rem;
+      padding: 0.5rem 0;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--space-sm);
+    }
+
+    @media (min-width: 360px) {
+      .form-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (min-width: 520px) {
+      .form-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    }
+
+    .form-group { margin-bottom: 0; }
+
+    .range-value {
+      display: inline-block;
+      min-width: 2.5rem;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .hint {
+      font-size: var(--text-sm);
+      color: var(--muted);
+      margin-top: var(--space-xs);
+    }
+
+    .outline-preview {
+      margin-top: var(--space-sm);
+      padding: var(--space-sm);
+      background: var(--bg);
+      border-radius: var(--radius);
+      font-size: var(--text-sm);
+      color: var(--muted);
+    }
+
+    textarea {
+      min-height: 8rem;
+      resize: vertical;
+      font-size: 0.875rem;
+      font-family: ui-monospace, monospace;
+    }
+
+    #log {
+      font-size: var(--text-sm);
+      color: var(--muted);
+      margin-top: var(--space-sm);
+      max-height: 5rem;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    footer {
+      text-align: center;
+      padding: var(--space-md);
+      padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+      color: var(--muted);
+      font-size: var(--text-sm);
+      border-top: 1px solid var(--border);
+      margin-top: var(--space-lg);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .upload-label {
+      display: inline-block;
+      min-height: var(--touch);
+    }
+
+    .upload-label .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: min(100%, 8rem);
+    }
+
+    .upload-label input:focus + .button { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .intro-hint { margin-bottom: var(--space-md); }
+    .form-group-extra { margin-top: var(--space-md); }
+    .btn-row-extra { margin-top: var(--space-md); }
+    .export-status { margin-top: var(--space-sm); color: var(--accent); }
+
+    .settings-group {
+      margin-bottom: var(--space-sm);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .settings-group summary {
+      padding: var(--space-sm) var(--space-md);
+      font-weight: 600;
+      font-size: var(--text-sm);
+      color: var(--accent);
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .settings-group summary::-webkit-details-marker { display: none; }
+    .settings-group summary::after {
+      content: "+";
+      float: right;
+      font-weight: 400;
+      opacity: 0.7;
+    }
+    .settings-group[open] summary::after { content: "−"; }
+    .settings-group-content {
+      padding: var(--space-md);
+      padding-top: 0;
+    }
+    .settings-group-content .form-grid { margin-top: 0; }
+    .readonly-label { color: var(--muted); }
+    .derived-display {
+      min-height: var(--touch);
+      display: flex;
+      align-items: center;
+      font-family: ui-monospace, monospace;
+      color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="page-header">
+    <a href="#" id="backToStart" role="button">← Back</a>
+    <h1>Photo to Vase</h1>
+  </header>
+
+  <main class="container">
+    <p class="hint intro-hint">View a 3D shape from the front and you get a 2D silhouette. We turn that silhouette into a vase-mode 3D print (e.g. a can of soda becomes a tubular shape).</p>
+    <!-- Step 1: Capture -->
+    <section class="step" id="step-capture">
+      <h2>1. Take a picture</h2>
+      <p class="hint">Capture or upload a front-on photo of the object. The outline you select will become the vase shape.</p>
+      <div class="video-wrap" id="videoWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="captureCanvas" style="display:none;"></canvas>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="btnStartCamera">Start camera</button>
+        <button type="button" id="btnCapture" class="primary" disabled>Capture photo</button>
+        <label class="upload-label">
+          <input type="file" id="fileInput" accept="image/*" style="display:none;">
+          <span class="button">Upload image</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Step 2: Outline -->
+    <section class="step" id="step-outline" style="display:none;">
+      <h2>2. Select the object</h2>
+      <p class="hint"><strong>Click on the object</strong> in the image to select it. Then refine: click <strong>Add</strong> and click on the image to include more, or <strong>Remove</strong> and click to deselect. The red line is the vase outline.</p>
+      <div class="canvas-wrap">
+        <canvas id="outlineCanvas"></canvas>
+      </div>
+      <label>Tolerance <span class="range-value" id="toleranceValue">32</span> <span class="hint">(higher = larger area per click)</span></label>
+      <input type="range" id="tolerance" min="5" max="120" value="32">
+      <div class="btn-row">
+        <button type="button" id="btnModeAdd">Add to selection</button>
+        <button type="button" id="btnModeSubtract">Remove from selection</button>
+        <button type="button" id="btnClearSelection">Clear</button>
+        <button type="button" id="btnUseOutline" class="primary">Use this outline →</button>
+      </div>
+      <div class="outline-preview" id="outlinePreview">Click on the object to select it.</div>
+    </section>
+
+    <!-- Step 3: Printer specs (PrusaSlicer-style grouped settings, defaults from Sample.gcode) -->
+    <section class="step" id="step-specs" style="display:none;">
+      <h2>3. Printer & vase settings</h2>
+      <p class="hint">Defaults from Creality Ender-3 V3 KE / Sample.gcode. Expand a section to edit.</p>
+
+      <details class="settings-group" open>
+        <summary>Printer (machine)</summary>
+        <div class="settings-group-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Bed size X (mm)</label>
+              <input type="number" id="bedSizeX" value="220" min="100" max="500" title="Print bed width (bed_shape)">
+            </div>
+            <div class="form-group">
+              <label>Bed size Y (mm)</label>
+              <input type="number" id="bedSizeY" value="220" min="100" max="500" title="Print bed depth">
+            </div>
+            <div class="form-group">
+              <label>Nozzle diameter (mm)</label>
+              <input type="number" id="nozzleSize" value="1" min="0.2" max="1.2" step="0.1" title="nozzle_diameter">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings-group" open>
+        <summary>Filament</summary>
+        <div class="settings-group-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Filament diameter (mm)</label>
+              <select id="filamentDiam">
+                <option value="1.75" selected>1.75 mm</option>
+                <option value="2.85">2.85 mm</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Filament density (g/cm³)</label>
+              <input type="number" id="filamentDensity" value="1.25" min="0.8" max="2" step="0.01" title="Optional, for weight estimate">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings-group" open>
+        <summary>Layers and perimeters</summary>
+        <div class="settings-group-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Layer height (mm)</label>
+              <input type="number" id="layerHeight" value="0.9" min="0.1" max="1" step="0.05" title="layer_height">
+            </div>
+            <div class="form-group">
+              <label>First layer height (mm)</label>
+              <input type="number" id="firstLayerHeight" value="0.8" min="0.1" max="1" step="0.05" title="first_layer_height">
+            </div>
+            <div class="form-group">
+              <label>Line width (mm)</label>
+              <input type="number" id="lineWidth" value="1.5" min="0.2" max="2" step="0.05" title="outer_wall_line_width">
+            </div>
+            <div class="form-group">
+              <label>Bottom layers</label>
+              <input type="number" id="bottomLayers" value="1" min="1" max="10" title="Solid layers at base">
+            </div>
+            <div class="form-group">
+              <label>Z height (mm)</label>
+              <input type="number" id="vaseHeight" value="60" min="10" max="300" title="Print height; shape scaled uniformly">
+            </div>
+            <div class="form-group">
+              <label>Max size (mm)</label>
+              <input type="number" id="maxSizeMm" value="80" min="20" max="300" title="Max contour size on bed">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings-group">
+        <summary>Speed</summary>
+        <div class="settings-group-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Max volumetric speed (mm³/s)</label>
+              <input type="number" id="maxVolumetricSpeed" value="8" min="1" max="25" step="0.5" title="Conservative limit; print speed is derived from this and line width × layer height">
+            </div>
+            <div class="form-group">
+              <label class="readonly-label">Derived speed (mm/s)</label>
+              <output id="derivedSpeedDisplay" class="derived-display" aria-live="polite">—</output>
+            </div>
+          </div>
+          <p class="hint">Speed = max volumetric ÷ (line width × layer height). First layer uses first layer height, so it prints slower automatically.</p>
+        </div>
+      </details>
+
+      <details class="settings-group">
+        <summary>Temperature</summary>
+        <div class="settings-group-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Bed (first layer) (°C)</label>
+              <input type="number" id="bedTemp" value="60" min="0" max="120" title="first_layer_bed_temperature">
+            </div>
+            <div class="form-group">
+              <label>Nozzle (first layer) (°C)</label>
+              <input type="number" id="hotendTemp" value="225" min="180" max="280" title="first_layer_temperature">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="settings-group">
+        <summary>Custom G-code</summary>
+        <div class="settings-group-content">
+          <div class="form-group">
+            <label>Start G-code</label>
+            <textarea id="startGcode" rows="10"></textarea>
+          </div>
+          <div class="form-group">
+            <label>End G-code</label>
+            <textarea id="endGcode" rows="8"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <div class="btn-row btn-row-extra">
+        <button type="button" id="btnGoExport" class="primary">Generate & download G-code</button>
+      </div>
+      <p class="hint export-status" id="exportStatus" style="display:none;"></p>
+    </section>
+  </main>
+
+  <footer>
+    <a href="../index.html">KeyQuest</a> · Photo to Vase — outline from photo to vase-mode G-code
+  </footer>
+
+  <script src="photo-to-vase.js"></script>
+</body>
+
+</html>
