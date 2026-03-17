@@ -99,6 +99,7 @@
       border-radius: var(--radius-lg);
       padding: var(--space-md);
       margin-bottom: var(--space-md);
+      overflow: visible;
     }
 
     .step h2 {
@@ -217,6 +218,61 @@
     .drop-zone-text { font-weight: 500; }
     .drop-zone-hint { font-size: var(--text-sm); margin-top: var(--space-xs); }
 
+    .mode-choice { display: flex; flex-direction: column; gap: var(--space-md); margin-top: var(--space-md); }
+    .mode-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-lg);
+      min-height: var(--touch);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      color: var(--text);
+      font-size: var(--text-base);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mode-btn.primary { border-color: var(--accent); background: rgba(107, 155, 209, 0.15); }
+    .mode-btn:hover, .mode-btn:focus { border-color: var(--accent); background: rgba(107, 155, 209, 0.1); }
+    .mode-btn-icon { font-size: 2rem; margin-bottom: var(--space-xs); }
+    .mode-btn-label { font-weight: 600; }
+    .mode-btn-desc { font-size: var(--text-sm); color: var(--muted); margin-top: var(--space-xs); }
+
+    .palette-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: var(--space-sm);
+    }
+    .palette-swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.1s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .palette-swatch:hover { transform: scale(1.15); }
+    .palette-swatch.active { border-color: #fff; transform: scale(1.2); }
+
+    .draw-grid-wrap {
+      display: flex;
+      justify-content: center;
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: var(--space-sm);
+      margin-bottom: var(--space-sm);
+      overflow: visible;
+    }
+    .draw-grid-wrap canvas {
+      touch-action: none;
+      cursor: crosshair;
+    }
+
     .pixel-result {
       display: flex;
       justify-content: center;
@@ -255,15 +311,32 @@
 
 <body>
   <header class="page-header">
-    <a href="../index.html">← Back</a>
+    <a href="#" id="backToStart" role="button">← Back</a>
     <h1>Pixel Art</h1>
   </header>
 
   <main class="container">
-    <p class="hint intro-hint">Upload an image, crop it to a square, and turn it into pixel art.</p>
+    <p class="hint intro-hint">Create pixel art from a photo or draw it by hand.</p>
+
+    <!-- Step 0: Choose mode -->
+    <section class="step" id="step-choice">
+      <h2>Choose mode</h2>
+      <div class="mode-choice">
+        <button type="button" id="btnModeUpload" class="mode-btn primary">
+          <span class="mode-btn-icon">🖼️</span>
+          <span class="mode-btn-label">From image</span>
+          <span class="mode-btn-desc">Upload a photo and convert it to pixel art</span>
+        </button>
+        <button type="button" id="btnModeDraw" class="mode-btn">
+          <span class="mode-btn-icon">✏️</span>
+          <span class="mode-btn-label">Draw</span>
+          <span class="mode-btn-desc">Paint pixel art on a grid with the colour palette</span>
+        </button>
+      </div>
+    </section>
 
     <!-- Step 1: Upload -->
-    <section class="step" id="step-upload">
+    <section class="step" id="step-upload" style="display:none;">
       <h2>1. Upload an image</h2>
       <div class="drop-zone" id="dropZone">
         <div class="drop-zone-icon">🖼️</div>
@@ -286,9 +359,23 @@
       </div>
     </section>
 
-    <!-- Step 3: Result -->
+    <!-- Step: Draw -->
+    <section class="step" id="step-draw" style="display:none;">
+      <h2>Draw pixel art</h2>
+      <p class="hint">Pick a colour, then click or drag on the grid to paint. Right-click or long-press to erase.</p>
+      <div id="paletteBar" class="palette-bar"></div>
+      <div class="draw-grid-wrap">
+        <canvas id="drawCanvas"></canvas>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="btnDrawClear">Clear grid</button>
+        <button type="button" id="btnDrawDone" class="primary">Done →</button>
+      </div>
+    </section>
+
+    <!-- Step: Result -->
     <section class="step" id="step-result" style="display:none;">
-      <h2>3. Your pixel art</h2>
+      <h2>Your pixel art</h2>
       <div class="pixel-result">
         <canvas id="resultCanvas"></canvas>
       </div>
