@@ -24,7 +24,6 @@ let sourceImg = null;
 let crop = { x: 0, y: 0, size: 0 };
 let dragState = null;   // null | { type, startX, startY, origCrop }
 let imgScale = 1;       // ratio: canvas CSS pixels → source image pixels
-let canvasRect = null;  // cached bounding rect
 
 const HANDLE_RADIUS = 10;
 
@@ -44,8 +43,8 @@ function handleFile(file) {
     const img = new Image();
     img.onload = () => {
       sourceImg = img;
-      initCrop();
       showStep(stepCrop);
+      initCrop();
     };
     img.src = e.target.result;
   };
@@ -139,11 +138,13 @@ function getCorners() {
 }
 
 function getPointer(e) {
-  if (!canvasRect) canvasRect = cropCanvas.getBoundingClientRect();
+  const rect = cropCanvas.getBoundingClientRect();
   const touch = e.touches ? e.touches[0] : e;
+  const scaleX = cropCanvas.width / rect.width;
+  const scaleY = cropCanvas.height / rect.height;
   return {
-    x: touch.clientX - canvasRect.left,
-    y: touch.clientY - canvasRect.top,
+    x: (touch.clientX - rect.left) * scaleX,
+    y: (touch.clientY - rect.top) * scaleY,
   };
 }
 
@@ -158,7 +159,6 @@ function hitTest(px, py) {
 
 function onPointerDown(e) {
   e.preventDefault();
-  canvasRect = cropCanvas.getBoundingClientRect();
   const p = getPointer(e);
   const hit = hitTest(p.x, p.y);
   if (!hit) return;
